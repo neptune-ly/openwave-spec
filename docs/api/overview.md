@@ -25,17 +25,17 @@ Browse and test the full API surface in your browser.
 
 | Method | Path | Description |
 |:---|:---|:---|
-| `POST` | `/payments/sessions` | Create a payment session |
-| `GET` | `/payments/sessions/{id}` | Get session status |
-| `GET` | `/payments/sessions` | List sessions |
-| `POST` | `/payments/sessions/{id}/cancel` | Cancel a pending session |
+| `POST` | `/payments/initiate` | Create a payment session |
+| `GET` | `/payments/{session_id}` | Get session status |
+| `GET` | `/payments` | List sessions |
+| `POST` | `/payments/{session_id}/cancel` | Cancel a pending session |
 
 ### Presented Payments (`openwave-presented-payments-v1.yaml`)
 
 | Method | Path | Description |
 |:---|:---|:---|
 | `GET` | `/capabilities` | Read supported QR/NFC, modes, intents, and operator role |
-| `POST` | `/presentments` | Create a merchant-presented or customer-presented request |
+| `POST` | `/presentments` | Create a merchant-presented request |
 | `GET` | `/presentments/{presentment_id}` | Read a presentment |
 | `POST` | `/presentments/{presentment_id}/claim` | Claim a presentment and create the underlying session |
 | `POST` | `/presentments/{presentment_id}/cancel` | Cancel a pending presentment |
@@ -62,11 +62,10 @@ Browse and test the full API surface in your browser.
 
 | Method | Path | Description |
 |:---|:---|:---|
-| `POST` | `/merchants/{id}/webhooks` | Register webhook endpoint |
-| `GET` | `/merchants/{id}/webhooks` | List webhook endpoints |
-| `DELETE` | `/merchants/{id}/webhooks/{wid}` | Remove endpoint |
-| `GET` | `/admin/webhooks` | List all deliveries (admin) |
-| `POST` | `/admin/webhooks/{id}/retry` | Retry failed delivery |
+| `GET` | `/webhooks` | List webhook deliveries |
+| `GET` | `/webhooks/session/{session_id}` | List deliveries for a payment session |
+| `POST` | `/webhooks/{delivery_id}/retry` | Retry failed delivery |
+| `POST` | `/webhooks/test` | Send a signed test webhook |
 
 ### Open Banking (`openwave-open-banking-v1.0.yaml`)
 
@@ -144,7 +143,7 @@ https://astro.neptune.ly/api/v1
 
 | I am building... | Start here | Then read |
 |:---|:---|:---|
-| Merchant checkout | `POST /payments/sessions` | `GET /payments/sessions/{id}`, webhook events, idempotency |
+| Merchant checkout | `POST /payments/initiate` | `GET /payments/{session_id}`, webhook events, idempotency |
 | Merchant QR / NFC checkout | `POST /presentments` | claim flow, capability discovery, hosted SCA |
 | Financed checkout / BNPL | `POST /credit/assessments` | finance offers, hosted acceptance, repayment schedule |
 | Subscription billing | `POST /recurring/mandates` | hosted mandate consent, mandate charges, cancellation |

@@ -102,7 +102,7 @@ Default limits (contact your gateway operator for custom limits):
 
 | Endpoint class | Limit |
 |:---|:---|
-| `POST /payments/sessions` | 100 req/min per merchant |
+| `POST /payments/initiate` | 100 req/min per merchant |
 | `GET` endpoints | 300 req/min per key |
 | `POST /ob/token` | 30 req/min per client |
 | Identity resolution | 600 req/min (public, IP-based) |

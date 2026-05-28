@@ -1,8 +1,8 @@
 # Payments API
 
-The Payments API is the merchant-facing payment contract. It covers one-time checkout, NPT or IBAN payer resolution, customer authorization, bank execution, recurring mandates, and merchant webhooks.
+The Payments API is the merchant-facing payment contract. It covers one-time checkout, NPT or IBAN payer resolution, customer authorization, bank execution, refunds, recurring mandates, and merchant webhooks.
 
-If your flow starts with a QR code, NFC handoff, or customer-presented token, read [Presented Payments](./presented-payments.md) first. That spec creates or claims the session, then hands control back to the same payment and mandate lifecycle described on this page.
+If your flow starts with a merchant QR code, NFC handoff, or app handoff, read [Presented Payments](./presented-payments.md) first. That spec creates or claims the presentment, then hands control back to the same payment and mandate lifecycle described on this page.
 
 If your flow is financed checkout, read [Credit & Finance](./credit-finance.md) first. BNPL, revolving-credit, and Murabaha offers use their own assessment, offer, contract, and repayment lifecycle, then settle merchant funds through the same final payment states and signed webhook rules described here.
 
@@ -22,7 +22,73 @@ If your flow is financed checkout, read [Credit & Finance](./credit-finance.md) 
 | 2 | `POST /session/{id}/resolve-payer` | Hosted checkout / SDK | Resolve an NPT alias or IBAN to the debtor bank and masked customer details. |
 | 3 | `POST /session/{id}/select-auth` | Hosted checkout / SDK | Choose OTP or push authorization when multiple methods are available. |
 | 4 | `POST /session/{id}/confirm-otp` | Hosted checkout / SDK | Confirm the customer OTP collected by the secure gateway surface. |
-| 5 | `GET /payments/{id}/status` | Merchant backend | Poll status when needed. Webhooks remain the final source for fulfilment. |
+| 5 | `GET /payments/{session_id}` | Merchant backend | Poll status when needed. Webhooks remain the final source for fulfilment. |
+
+## Refunds and reversals
+
+Merchants can create refunds only against their own completed payment sessions. A refund may be full or partial, but the cumulative completed and in-flight refund amount must never exceed the original payment amount.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /payments/{session_id}/refunds` | Create a full or partial refund for a completed payment session. |
+| `GET /payments/{session_id}/refunds` | List refunds created for a payment session. |
+| `GET /payments/refunds/{refund_id}` | Read refund status when polling is needed. |
+
+Refund creation accepts the standard `Idempotency-Key` header. Retrying the same key returns the original refund and must not create duplicate money movement.
+
+```http
+POST /payments/ses_01HX7R7JVY5G7K2A2Y65HRJ9NQ/refunds
+Authorization: Bearer mk_live_...
+Idempotency-Key: refund-ORD-1042-1
+Content-Type: application/json
+
+{
+  "amount": 12500,
+  "currency": "LYD",
+  "merchant_reference": "ORD-1042-RF-1",
+  "reason": "PARTIAL_RETURN"
+}
+```
+
+```json
+{
+  "refund_id": "rfd_01HX8B3W4QG7TK2V4R9MB8K2YX",
+  "session_id": "ses_01HX7R7JVY5G7K2A2Y65HRJ9NQ",
+  "status": "PROCESSING",
+  "amount": 12500,
+  "currency": "LYD",
+  "merchant_reference": "ORD-1042-RF-1",
+  "original_payment_amount": 860000,
+  "refundable_amount_before": 860000,
+  "refundable_amount_after": 847500,
+  "rail": "LYPAY_REVERSAL",
+  "reversal_reference": "rv_20260508_00042",
+  "failure_reason": null,
+  "idempotency_key": "refund-ORD-1042-1",
+  "created_at": "2026-05-08T23:02:10Z"
+}
+```
+
+For a full refund, set `amount` to the current remaining refundable amount. For a partial refund, set any smaller positive amount in the original payment currency.
+
+Refund execution must reuse the original bank or payment rail reversal where available:
+
+| Original route | Preferred refund path |
+|---|---|
+| Same-bank internal transfer | Same-bank reversal or book-transfer correction. |
+| Cross-bank LyPay transfer | LyPay reversal, return, or equivalent rail-native reversal. |
+| Rail reversal unavailable | Compliant fallback credit transfer with the same refund lifecycle and reconciliation fields. |
+
+### Refund statuses
+
+| Status | Meaning | Merchant action |
+|---|---|---|
+| `CREATED` | Refund request was accepted and recorded. | Store the refund ID and wait. |
+| `PROCESSING` | Bank or payment rail reversal is underway. | Do not treat as complete yet. |
+| `COMPLETED` | Refund is final and successful. | Update the order/refund record. |
+| `FAILED` | Refund is final and did not complete. | Show a safe failure message or retry with a new idempotency key when appropriate. |
+
+Failure reasons are merchant-safe categories such as `PAYMENT_NOT_COMPLETED`, `AMOUNT_EXCEEDS_REFUNDABLE`, `CURRENCY_MISMATCH`, `REFUND_WINDOW_EXPIRED`, `REVERSAL_NOT_SUPPORTED`, `BANK_REJECTED`, `RAIL_UNAVAILABLE`, `TEMPORARY_PROCESSING_ERROR`, `COMPLIANCE_REVIEW`, and `UNKNOWN`. They must not expose sensitive payer, bank, or compliance details.
 
 ## Example responses
 
@@ -30,12 +96,13 @@ If your flow is financed checkout, read [Credit & Finance](./credit-finance.md) 
 
 ```json
 {
-  "payment_id": "pay_01HX7R7J3F8H9B5K9K1V1F0A2M",
   "session_id": "ses_01HX7R7JVY5G7K2A2Y65HRJ9NQ",
   "status": "PENDING",
   "amount": 860000,
   "currency": "LYD",
-  "checkout_url": "https://gateway.example.com/pay/ses_01HX7R7JVY5G7K2A2Y65HRJ9NQ",
+  "payment_url": "https://gateway.example.com/pay/ses_01HX7R7JVY5G7K2A2Y65HRJ9NQ?token=chk_...",
+  "checkout_url": "https://gateway.example.com/pay/ses_01HX7R7JVY5G7K2A2Y65HRJ9NQ?token=chk_...",
+  "checkout_session_token": "chk_...",
   "expires_at": "2026-05-08T22:30:00Z",
   "idempotency_key": "order-NS-10042"
 }
@@ -48,13 +115,13 @@ If your flow is financed checkout, read [Credit & Finance](./credit-finance.md) 
   "session_id": "ses_01HX7R7JVY5G7K2A2Y65HRJ9NQ",
   "payer": {
     "alias": "tellesy@andalus",
-    "bank_id": "andalus",
+    "bank_handle": "andalus",
     "bank_name": "Andalus Bank",
-    "display_name": "M*** T******",
-    "masked_iban": "LY83*****************2345",
-    "available_auth_methods": ["OTP", "PUSH"]
+    "account_name_masked": "M*** T******",
+    "iban_masked": "LY83*****************2345",
+    "auth_modes": ["OTP", "PUSH"]
   },
-  "status": "AUTH_REQUIRED"
+  "status": "OTP_SENT"
 }
 ```
 
@@ -62,7 +129,7 @@ If your flow is financed checkout, read [Credit & Finance](./credit-finance.md) 
 
 ```json
 {
-  "payment_id": "pay_01HX7R7J3F8H9B5K9K1V1F0A2M",
+  "session_id": "ses_01HX7R7JVY5G7K2A2Y65HRJ9NQ",
   "status": "COMPLETED",
   "amount": 860000,
   "currency": "LYD",
@@ -99,11 +166,13 @@ If your flow is financed checkout, read [Credit & Finance](./credit-finance.md) 
 | Status | Meaning | Merchant action |
 |---|---|---|
 | `PENDING` | Session created, customer has not completed authorization. | Keep order open. |
-| `AUTH_REQUIRED` | Gateway is waiting for OTP or push approval. | Show hosted authorization state only. |
+| `OTP_SENT` / `PUSH_SENT` | Gateway is waiting for bank authentication. | Keep the customer inside the hosted authorization surface. |
 | `PROCESSING` | Bank execution or settlement is in progress. | Do not fulfil yet. |
 | `COMPLETED` | Final successful payment state. | Fulfil after webhook signature verification. |
 | `FAILED` | Final failed state. | Show a recoverable message when possible. |
 | `CANCELLED` | Customer or merchant cancelled the session. | Close order gracefully. |
+
+Refunds have their own lifecycle: `CREATED`, `PROCESSING`, `COMPLETED`, and `FAILED`. Do not infer refund completion from the original payment status.
 
 ## Bank callback endpoints
 
@@ -115,6 +184,7 @@ Gateway-to-bank calls use `X-OpenWave-Internal-Key: ow_cbk_...`. These endpoints
 | `POST /bank/callback/verify-otp` | Verify the OTP with the bank. |
 | `POST /bank/callback/send-push` | Start bank push authorization when supported. |
 | `POST /bank/callback/execute-transaction` | Execute debit and route credit through the configured rail. |
+| `POST /bank/callback/refund-transaction` | Execute rail reversal or fallback refund transfer. |
 | `POST /bank/callback/notify-credit` | Notify receiving bank or merchant bank that credit has arrived. |
 
 ## Recurring mandates
@@ -123,19 +193,19 @@ Recurring mandates use the same security model as payments: the customer must ap
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /mandates/create` | Create a mandate request with amount rules, frequency, expiry, and merchant reference. |
-| `GET /mandates/{id}` | Read mandate state. |
-| `POST /mandates/{id}/charge` | Charge an active mandate within its approved limits. |
-| `POST /mandates/{id}/cancel` | Cancel the mandate and stop future charges. |
+| `POST /recurring/mandates` | Create a mandate request with amount rules, frequency, expiry, and merchant reference. |
+| `GET /recurring/mandates/{mandate_id}` | Read mandate state. |
+| `POST /recurring/mandates/{mandate_id}/charge` | Charge an active mandate within its approved limits. |
+| `DELETE /recurring/mandates/{mandate_id}` | Cancel the mandate and stop future charges. |
 
 ### Mandate approval response
 
 ```json
 {
   "mandate_id": "mnd_01HX7V10K3QVYRW9P9Z1SK5P8B",
-  "status": "AWAITING_CUSTOMER_AUTH",
-  "approval_url": "https://gateway.example.com/mandate/mnd_01HX7V10K3QVYRW9P9Z1SK5P8B/consent",
-  "amount": 10000,
+  "status": "PENDING_CONSENT",
+  "consent_url": "https://gateway.example.com/mandate/mnd_01HX7V10K3QVYRW9P9Z1SK5P8B/consent?token=...",
+  "amount_limit": 10000,
   "currency": "LYD",
   "frequency": "MONTHLY",
   "merchant_reference": "care-plus-monthly",

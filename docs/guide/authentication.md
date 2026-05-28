@@ -80,9 +80,9 @@ These endpoints require a merchant API key (`Authorization: Bearer mk_...`):
 
 | Endpoint | Purpose |
 |:---|:---|
-| `POST /payments/sessions` | Create a checkout session |
-| `GET /payments/sessions/{id}` | Poll session status (no payer PII returned) |
-| `POST /payments/sessions/{id}/cancel` | Cancel a session |
+| `POST /payments/initiate` | Create a checkout session |
+| `GET /payments/{session_id}` | Poll session status (no payer PII returned) |
+| `POST /payments/{session_id}/cancel` | Cancel a session |
 | `GET /payments/fee` | Query fee estimate |
 | `POST /recurring/mandates` | Create a recurring mandate |
 
@@ -92,9 +92,9 @@ These endpoints are **blocked for merchant API keys**. They must be called from 
 
 | Endpoint | Purpose |
 |:---|:---|
-| `POST /payments/sessions/{id}/resolve-payer` | Look up payer by alias or IBAN |
-| `POST /payments/sessions/{id}/select-auth` | Trigger OTP or push notification |
-| `POST /payments/sessions/{id}/confirm` | Submit OTP code and execute payment |
+| `POST /session/{session_id}/resolve-payer` | Look up payer by alias or IBAN |
+| `POST /session/{session_id}/select-auth` | Trigger OTP or push notification |
+| `POST /session/{session_id}/confirm-otp` | Submit OTP code and execute payment |
 
 Attempting to call any checkout step endpoint with a merchant API key returns:
 

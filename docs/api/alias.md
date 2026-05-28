@@ -25,9 +25,9 @@ The Alias API covers NPT resolution and account selection for payments. Ownershi
 | Endpoint | Purpose |
 |---|---|
 | `POST /session/{id}/resolve-payer` | Resolve an alias or IBAN inside the checkout session. |
-| `GET /aliases/{alias}` | Resolve alias metadata when exposed by a gateway. |
-| `POST /aliases/register` | Gateway-proxied registration when the implementation supports it. |
-| `POST /aliases/{alias}/default-account` | Set default account for an alias within permitted ownership rules. |
+| `GET /alias/{alias}` | Resolve alias metadata when exposed by a gateway. |
+| `POST /alias/enroll` | Gateway-assisted enrollment backed by the OpenWave Identity Registry. |
+| `POST /alias/{alias}/default-account` | Set default account for an alias within permitted ownership rules. |
 
 ## Example responses
 
@@ -40,13 +40,13 @@ The Alias API covers NPT resolution and account selection for payments. Ownershi
   "bank_handle": "andalus",
   "status": "ACTIVE",
   "route": {
-    "bank_id": "andalus",
+    "bank_handle": "andalus",
     "account_ref": "acctref_7d8f9a",
     "default": true
   },
   "display": {
     "name": "M*** T******",
-    "masked_iban": "LY83*****************2345"
+    "iban_masked": "LY83*****************2345"
   }
 }
 ```

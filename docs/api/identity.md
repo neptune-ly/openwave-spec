@@ -42,7 +42,7 @@ The Identity Registry API is the source of truth for NPT handles, bank handles, 
   "status": "ACTIVE",
   "routes": [
     {
-      "bank_id": "andalus",
+      "bank_handle": "andalus",
       "account_ref": "acctref_7d8f9a",
       "default": true,
       "capabilities": ["PAYMENTS", "OPEN_BANKING"]

@@ -11,7 +11,8 @@ OpenWave is a **routing layer** — it doesn't replace your core banking system.
 1. Verify customer identity (OTP or SCA)
 2. Debit the sending account
 3. Credit the destination account (if it's your bank)
-4. Query account details for Open Banking
+4. Reverse or refund completed payments where policy and rail support allow
+5. Query account details for Open Banking
 
 You expose a **bank core callback API** that the gateway calls. The spec defines exactly what this interface must look like.
 
@@ -23,7 +24,7 @@ You'll need to provide:
 - Bank handle (e.g. `andalus`) — globally unique short identifier
 - Display name
 - Country (`LY`)
-- Core API base URL (your callback server)
+- Core API base URL (your OpenWave callback server, for example `https://bank.example.com/api/v1/openwave`)
 - Settlement IBAN (where net settlements are credited/debited)
 - Contact email
 
@@ -39,6 +40,7 @@ The gateway calls your core at the `core_base_url` you registered. All endpoints
 | `/verify-otp` | POST | Customer submits OTP code |
 | `/send-push` | POST | Customer selects push auth |
 | `/execute-transaction` | POST | OTP/push verified — debit + route funds |
+| `/refund-transaction` | POST | Merchant requests a full or partial refund against a completed payment |
 | `/notify-credit` | POST | Cross-bank credit arrives (non-blocking) |
 | `/ob/accounts` | POST | Open Banking AISP account list |
 | `/ob/balances` | POST | Open Banking AISP balance query |
@@ -47,6 +49,16 @@ The gateway calls your core at the `core_base_url` you registered. All endpoints
 
 ::: tip Bank-agnostic routing
 The gateway has **one generic HTTP client** for all banks. There is no bank-specific code in the gateway — your `core_base_url` is the sole routing target.
+:::
+
+::: tip Recommended callback base path
+Use a product-neutral OpenWave base path such as:
+
+```text
+https://bank.example.com/api/v1/openwave
+```
+
+The gateway appends the standard callback operation, for example `POST {core_base_url}/send-otp`. A bank may place an internet-facing edge in front of private middleware, but the public base URL should remain OpenWave-branded rather than tied to a specific gateway product.
 :::
 
 ### Send OTP Challenge
@@ -106,6 +118,40 @@ X-OpenWave-Internal-Key: <shared-secret>
 ```json
 { "transfer_ref": "TRF-20260424-001", "route_used": "SAME_BANK", "lypay_ref": null }
 ```
+
+### Refund Transaction
+
+Called when a merchant requests a full or partial refund for a completed payment. The bank should use the original rail reversal where available. If rail reversal is not available, the bank may execute a compliant return transfer while preserving the same OpenWave refund lifecycle.
+
+```http
+POST {core_base_url}/refund-transaction
+X-OpenWave-Internal-Key: <shared-secret>
+
+{
+  "refund_id": "rfd_01HX8B3W4QG7TK2V4R9MB8K2YX",
+  "original_session_id": "ops_01HZGV...",
+  "original_transfer_ref": "TRF-20260424-001",
+  "merchant_name": "My Store",
+  "merchant_reference": "order_1042",
+  "refund_reference": "order_1042_refund_1",
+  "debtor_iban": "LY83002700200099900002",
+  "creditor_iban": "LY83002700100099900001",
+  "creditor_bank_handle": "bank-a",
+  "creditor_bank_lypay_code": "001",
+  "amount": 12500,
+  "currency": "LYD",
+  "reason": "Customer return",
+  "route_type": "LYPAY_INITIATE"
+}
+```
+
+Return a refund reference and the route used:
+
+```json
+{ "refund_ref": "RFD-20260424-001", "route_used": "LYPAY_INITIATE", "lypay_ref": "LPY-RFD-001", "status": "COMPLETED" }
+```
+
+If the bank cannot process the refund, return a controlled error with a merchant-safe code. Examples include `REFUND_WINDOW_EXPIRED`, `REVERSAL_NOT_SUPPORTED`, `BANK_REJECTED`, or `RAIL_UNAVAILABLE`.
 
 ### Notify Credit (cross-bank, non-blocking)
 

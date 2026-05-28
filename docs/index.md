@@ -60,7 +60,7 @@ features:
   - icon:
       svg: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/><path d="M4 12a8 8 0 0 0 8 8"/><path d="M20 12a8 8 0 0 0-8-8"/></svg>'
     title: Presented Payments
-    details: Merchant-presented and customer-presented QR or NFC flows that still keep bank authorization inside hosted or official SDK surfaces. Banks and wallets can implement the channel directly when enabled.
+    details: Merchant-presented QR, NFC, and app-handoff flows that still keep bank authorization inside hosted or official SDK surfaces. Gateways, banks, and wallets can operate the channel for merchants when enabled.
     link: /guide/presented-payments
     linkText: Presented Payment Guide
 
@@ -182,7 +182,7 @@ features:
         <div class="ow-gateway-pill">Merchant / wallet<br><small>QR or NFC presenter</small></div>
         <div class="ow-switch-line"><span></span></div>
         <div class="ow-gateway-pill">Gateway / bank / wallet<br><small>capability-controlled channel</small></div>
-        <div class="ow-switch-foot">Operator enables QR, NFC, merchant-presented, customer-presented, and direct bank or wallet support through capabilities.</div>
+        <div class="ow-switch-foot">Operator enables QR, NFC, app handoff, merchant-presented, and direct operator support through capabilities.</div>
       </div>
     </article>
     <article class="ow-flow-card ow-ob-demo">

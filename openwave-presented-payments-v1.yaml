@@ -3,9 +3,14 @@ info:
   title: OpenWave Presented Payments API
   version: 1.0.0-draft
   description: |
-    OpenWave Presented Payments standard for merchant-presented and customer-presented
-    QR and NFC payment initiation. The presentment channel may be implemented by
-    a gateway, bank, or wallet. Channel enablement is operator-controlled.
+    OpenWave Presented Payments standard for merchant-presented QR, NFC, and
+    app/wallet handoff payment initiation. The presentment channel
+    may be implemented by a gateway, bank, or wallet. Channel enablement is
+    operator-controlled. In v1, the merchant or payment acceptor creates the
+    presentment and the customer pays by scanning or tapping that merchant surface.
+    Presented-payment channels start the flow only; customer authorization still
+    requires a trusted hosted, SDK, bank-app, or wallet surface that shows the
+    customer the payment or recurring terms before approval.
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -19,6 +24,7 @@ tags:
     description: Create, claim, cancel, and monitor QR or NFC presentments.
 security:
   - BearerMerchantKey: []
+  - OpenWaveGatewayKey: []
 paths:
   /capabilities:
     get:
@@ -38,17 +44,14 @@ paths:
                     operator_id: andalus-direct
                     deployment_role: BANK
                     presented_payments:
-                      enabled: true
-                      channels_supported: [QR, NFC]
-                      modes_supported: [MERCHANT_PRESENTED, CUSTOMER_PRESENTED]
-                      intents_supported: [ONE_TIME_PAYMENT, MANDATE_APPROVAL]
-                      enablement:
+                      supported_channels: [QR, NFC, APP_HANDOFF]
+                      supported_modes: [MERCHANT_PRESENTED]
+                      supported_intents: [ONE_TIME_PAYMENT, MANDATE_APPROVAL]
+                      enabled:
                         merchant_presented_qr: true
                         merchant_presented_nfc: true
-                        customer_presented_qr: false
-                        customer_presented_nfc: true
-                        direct_bank_presentment: true
-                        direct_wallet_presentment: false
+                        app_handoff: true
+                        direct_operator_presentment: true
                         mandate_approval_presentment: true
         '401':
           $ref: '#/components/responses/ErrorResponse'
@@ -96,6 +99,10 @@ paths:
     post:
       tags: [Presentments]
       summary: Claim a presentment and create the underlying secure flow
+      description: |
+        Claiming a presentment creates the underlying secure payment session or mandate approval flow.
+        Repeating the same claim with the same valid claim token should return the already-created
+        `payment_session_id` / `payment_url` or `mandate_id` / `mandate_consent_url`.
       operationId: claimPresentment
       parameters:
         - $ref: '#/components/parameters/PresentmentId'
@@ -108,11 +115,17 @@ paths:
               $ref: '#/components/schemas/ClaimPresentmentRequest'
       responses:
         '200':
-          description: Presentment claimed
+          description: Existing claim returned for an idempotent retry with the same valid claim token
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PresentmentClaimResponse'
+                $ref: '#/components/schemas/PresentedPaymentResponse'
+        '201':
+          description: Presentment claimed for the first time
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresentedPaymentResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
         '409':
@@ -130,7 +143,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PresentmentStatusResponse'
+                $ref: '#/components/schemas/PresentedPaymentResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
   /presentments/{presentment_id}/status:
@@ -160,9 +173,11 @@ components:
     IdempotencyKey:
       name: Idempotency-Key
       in: header
-      required: true
+      required: false
       schema:
         type: string
+        maxLength: 128
+      description: Merchant-scoped retry key for create operations. Reusing a key with a different body must return a conflict.
   responses:
     ErrorResponse:
       description: Error response
@@ -194,26 +209,24 @@ components:
           enum: [GATEWAY, BANK, WALLET]
         presented_payments:
           type: object
-          required: [enabled, channels_supported, modes_supported, intents_supported, enablement]
+          required: [supported_channels, supported_modes, supported_intents, enabled]
           properties:
-            enabled:
-              type: boolean
-            channels_supported:
+            supported_channels:
               type: array
               items:
                 type: string
-                enum: [QR, NFC]
-            modes_supported:
+                enum: [QR, NFC, APP_HANDOFF]
+            supported_modes:
               type: array
               items:
                 type: string
-                enum: [MERCHANT_PRESENTED, CUSTOMER_PRESENTED]
-            intents_supported:
+                enum: [MERCHANT_PRESENTED]
+            supported_intents:
               type: array
               items:
                 type: string
                 enum: [ONE_TIME_PAYMENT, MANDATE_APPROVAL]
-            enablement:
+            enabled:
               $ref: '#/components/schemas/PresentmentEnablement'
     PresentmentEnablement:
       type: object
@@ -222,30 +235,30 @@ components:
           type: boolean
         merchant_presented_nfc:
           type: boolean
-        customer_presented_qr:
+        app_handoff:
           type: boolean
-        customer_presented_nfc:
+          description: Enables app, universal-link, deep-link, or platform wallet handoff using the same presentment claim contract.
+        direct_operator_presentment:
           type: boolean
-        direct_bank_presentment:
-          type: boolean
-        direct_wallet_presentment:
-          type: boolean
+          description: Enables banks, wallets, or gateways to operate merchant-presented channels directly for their merchants or acceptors.
         mandate_approval_presentment:
           type: boolean
     PresentedPaymentCreateRequest:
       type: object
       required:
+        - channel
         - mode
         - intent
         - amount_mode
         - currency
-        - expires_at
-        - auth_required
-        - merchant
+        - description
       properties:
+        channel:
+          type: string
+          enum: [QR, NFC, APP_HANDOFF]
         mode:
           type: string
-          enum: [MERCHANT_PRESENTED, CUSTOMER_PRESENTED]
+          enum: [MERCHANT_PRESENTED]
         intent:
           type: string
           enum: [ONE_TIME_PAYMENT, MANDATE_APPROVAL]
@@ -262,23 +275,32 @@ components:
           maxLength: 3
         description:
           type: string
-        expires_at:
+        frequency:
           type: string
-          format: date-time
-        auth_required:
-          type: boolean
-          description: Must remain true for payment or mandate authorization flows.
-        preferred_channel:
+          enum: [ON_DEMAND, DAILY, WEEKLY, MONTHLY]
+          description: Required when intent is MANDATE_APPROVAL.
+        merchant_reference:
           type: string
-          enum: [QR, NFC]
-        merchant:
-          $ref: '#/components/schemas/MerchantIdentity'
-        recurrence:
-          $ref: '#/components/schemas/RecurrenceRules'
+        payer_alias:
+          type: string
+        payer_iban:
+          type: string
+        supported_auth_methods:
+          type: array
+          items:
+            type: string
+            enum: [OTP, PUSH]
+        customer_review:
+          $ref: '#/components/schemas/CustomerReviewSummary'
+        wallet_handoff:
+          $ref: '#/components/schemas/WalletHandoffOptions'
+        expires_in_seconds:
+          type: integer
+          minimum: 30
+          maximum: 3600
         metadata:
           type: object
-          additionalProperties:
-            type: string
+          additionalProperties: true
     MerchantIdentity:
       type: object
       required: [merchant_id, display_name]
@@ -314,28 +336,74 @@ components:
           type: string
         status:
           type: string
-          enum: [PENDING_CLAIM, CLAIMED, EXPIRED, CANCELLED]
+          enum: [CREATED, PAYMENT_SESSION_CREATED, MANDATE_SESSION_CREATED, EXPIRED, CANCELLED]
+        channel:
+          type: string
+          enum: [QR, NFC, APP_HANDOFF]
         mode:
           type: string
-          enum: [MERCHANT_PRESENTED, CUSTOMER_PRESENTED]
+          enum: [MERCHANT_PRESENTED]
         intent:
           type: string
           enum: [ONE_TIME_PAYMENT, MANDATE_APPROVAL]
+        amount_mode:
+          type: string
+          enum: [FIXED, OPEN]
+        amount:
+          type: integer
+        currency:
+          type: string
+        description:
+          type: string
+        merchant_reference:
+          type: string
         expires_at:
           type: string
           format: date-time
-        payment_id:
+        payment_session_id:
           type: string
+        payment_url:
+          type: string
+          format: uri
+          description: Secure hosted checkout URL returned after a one-time presentment claim. Customer SCA occurs only on this hosted, SDK-controlled, or bank-controlled surface.
         mandate_id:
           type: string
-        session_id:
+        mandate_consent_url:
           type: string
+          format: uri
+          description: Secure hosted mandate consent URL returned after a mandate-approval presentment claim. Customer SCA occurs only on this hosted, SDK-controlled, or bank-controlled surface.
+        auth_surface:
+          $ref: '#/components/schemas/AuthSurface'
+        supported_auth_methods:
+          type: array
+          items:
+            type: string
+        customer_review:
+          $ref: '#/components/schemas/CustomerReviewSummary'
+        wallet_handoff:
+          $ref: '#/components/schemas/WalletHandoffOptions'
+        metadata:
+          type: object
+        claimed_at:
+          type: string
+          format: date-time
+        cancelled_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
         presentment_payload:
           $ref: '#/components/schemas/PresentmentPayload'
         qr_payload:
           $ref: '#/components/schemas/QrPayload'
         nfc_payload:
           $ref: '#/components/schemas/NfcPayload'
+        app_handoff_payload:
+          $ref: '#/components/schemas/AppHandoffPayload'
     PresentmentPayload:
       type: object
       required: [uri, reference, channel]
@@ -346,13 +414,15 @@ components:
           type: string
         channel:
           type: string
-          enum: [QR, NFC]
+          enum: [QR, NFC, APP_HANDOFF]
     QrPayload:
       type: object
       properties:
         format:
           type: string
-          enum: [OPENWAVE_URI]
+          enum: [EMV_QR, OPENWAVE_URI]
+        emv_profile:
+          $ref: '#/components/schemas/OpenWaveEmvQrProfile'
         render_hint:
           type: string
           enum: [SVG_OR_PNG]
@@ -366,53 +436,168 @@ components:
           enum: [NDEF_URI]
         value:
           type: string
+        ndef_record_type:
+          type: string
+          enum: [URI]
+          description: NFC Forum NDEF URI record. Use HTTPS universal/app links where platform routing is required; `openwave://` may be used as a fallback only when the accepting app owns the scheme.
+    OpenWaveEmvQrProfile:
+      type: object
+      description: >
+        EMVCo merchant-presented QR profile used by OpenWave QR presentments. Existing
+        domestic QR schemes can continue to use their own GUI/templates; scanners route
+        to OpenWave only when this profile is detected.
+      required: [merchant_account_information_tag, gui, sub_tags]
+      properties:
+        merchant_account_information_tag:
+          type: string
+          example: '26'
+          description: Recommended EMV Merchant Account Information template tag. Operators may use another unused tag from 26-51 when required by the local QR scheme.
+        gui:
+          type: string
+          example: LY.OPENWAVE
+          description: Globally unique identifier inside sub-tag `00`.
+        sub_tags:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            '00': LY.OPENWAVE
+            '01': prs_01J15B6A1N2QZ5YP4V4P4FJW40
+            '02': claim-token
+            '03': QR
+            '04': P
+        additional_data_operator_tag:
+          type: string
+          example: '50.01'
+          description: Recommended place for operator/gateway id in the optional OpenWave operator template. Do not use NUMO 62-* sub-tags for OpenWave routing metadata.
+    AppHandoffPayload:
+      type: object
+      description: >
+        Signed URI or platform handoff descriptor for bank apps, wallets, universal links,
+        Android app links, iOS app links, and platform wallet integrations. This payload
+        starts the claim flow only and must not contain customer authentication secrets.
+      properties:
+        format:
+          type: string
+          enum: [OPENWAVE_URI, UNIVERSAL_LINK, APP_LINK, PLATFORM_WALLET_HANDOFF]
+        value:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    WalletHandoffOptions:
+      type: object
+      description: Device or platform handoff options available for a presented-payment flow.
+      properties:
+        supported_platforms:
+          type: array
+          items:
+            type: string
+            enum: [IOS, ANDROID, WEB]
+        preferred_channel:
+          type: string
+          enum: [QR, NFC, APP_HANDOFF]
+        universal_link:
+          type: string
+          format: uri
+        android_app_link:
+          type: string
+          format: uri
+        ios_app_link:
+          type: string
+          format: uri
+    CustomerReviewSummary:
+      type: object
+      description: >
+        Customer-facing summary that must be shown before approval in a hosted, SDK,
+        bank-app, or wallet-controlled surface. It is required for quick presented
+        payments, QR, NFC, app handoff, recurring mandate approval, and consent-style
+        presented flows.
+      required: [title, merchant, intent, amount_mode, currency, expires_at]
+      properties:
+        title:
+          type: string
+          example: Pay Neptune Store
+        merchant:
+          $ref: '#/components/schemas/MerchantIdentity'
+        intent:
+          type: string
+          enum: [ONE_TIME_PAYMENT, MANDATE_APPROVAL]
+        amount_mode:
+          type: string
+          enum: [FIXED, OPEN]
+        amount:
+          type: integer
+          description: Minor units. Required when amount_mode is FIXED.
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        fee_amount:
+          type: integer
+          description: Optional customer-visible fee in minor units.
+        total_amount:
+          type: integer
+          description: Optional customer-visible total amount in minor units.
+        payer_display:
+          type: string
+          description: Masked alias, IBAN, account nickname, or bank app account display.
+        destination_display:
+          type: string
+          description: Customer-safe destination or merchant account label.
+        recurrence:
+          $ref: '#/components/schemas/RecurrenceRules'
+        consent_summary:
+          type: array
+          description: Human-readable scopes or actions requested when the presentment starts a consent flow.
+          items:
+            type: string
+        cancellation_rights:
+          type: string
+          description: Customer-facing cancellation or revocation summary for recurring flows.
+        expires_at:
+          type: string
+          format: date-time
     ClaimPresentmentRequest:
       type: object
-      required: [channel, claimer_type]
+      description: >
+        Claims a QR or NFC presentment and starts the secure authorization flow.
+        This request must not contain OTP, PIN, passcode, push approval results,
+        bank credentials, or any other customer authentication secret.
       properties:
-        channel:
+        claim_token:
           type: string
-          enum: [QR, NFC]
-        claimer_type:
-          type: string
-          enum: [CUSTOMER_APP, MERCHANT_POS, BANK_APP, WALLET_APP]
         payer_alias:
           type: string
         payer_iban:
           type: string
-        customer_presented_token:
-          type: string
-        return_url:
+        amount:
+          type: integer
+        redirect_url:
           type: string
           format: uri
-    PresentmentClaimResponse:
-      type: object
-      required: [presentment_id, status, auth_required]
-      properties:
-        presentment_id:
+        cancel_url:
           type: string
-        status:
-          type: string
-          enum: [CLAIMED, AUTH_REQUIRED, PROCESSING]
-        payment_id:
-          type: string
-        mandate_id:
-          type: string
-        session_id:
-          type: string
-        auth_required:
-          type: boolean
-        auth_surface:
-          $ref: '#/components/schemas/AuthSurface'
+          format: uri
     AuthSurface:
       type: object
+      description: >
+        Secure surface where customer consent and SCA take place after claim.
+        A merchant or acceptor may open or hand off to this surface, but must not
+        collect OTP, PIN, passcode, push approval, or bank credentials itself.
       properties:
         type:
           type: string
-          enum: [HOSTED_CHECKOUT, SECURE_SDK_SHEET, BANK_APP]
+          enum: [HOSTED_CHECKOUT, HOSTED_MANDATE_CONSENT, SECURE_SDK_SHEET, BANK_APP]
+          description: Use HOSTED_CHECKOUT for one-time payment authorization and HOSTED_MANDATE_CONSENT for recurring mandate approval.
         url:
           type: string
           format: uri
+        session_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
     PresentmentStatusResponse:
       type: object
       required: [presentment_id, status]
@@ -421,17 +606,29 @@ components:
           type: string
         status:
           type: string
-          enum: [PENDING_CLAIM, CLAIMED, AUTH_REQUIRED, PROCESSING, EXPIRED, CANCELLED, COMPLETED, FAILED]
-        payment_id:
+          enum: [CREATED, PAYMENT_SESSION_CREATED, MANDATE_SESSION_CREATED, EXPIRED, CANCELLED]
+        payment_session_id:
           type: string
+        payment_url:
+          type: string
+          format: uri
+          description: Secure hosted checkout URL for one-time payment authorization.
         mandate_id:
           type: string
-        session_id:
+        mandate_consent_url:
           type: string
-        next_action:
+          format: uri
+          description: Secure hosted mandate consent URL for recurring authorization.
+        customer_review:
+          $ref: '#/components/schemas/CustomerReviewSummary'
+        auth_surface:
+          $ref: '#/components/schemas/AuthSurface'
+        expires_at:
           type: string
-        correlation_id:
+          format: date-time
+        updated_at:
           type: string
+          format: date-time
     ErrorEnvelope:
       type: object
       required: [error]

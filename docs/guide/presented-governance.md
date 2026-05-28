@@ -9,7 +9,7 @@ QR and NFC have different operational, fraud, and product implications across ba
 - **protocol compliance**
 - **channel enablement**
 
-An operator can be compliant without enabling every presented mode.
+An operator can be compliant without enabling every presented channel or intent.
 
 ## Required capability flags
 
@@ -19,14 +19,13 @@ At minimum, capability metadata should state:
 - supported modes
 - supported intents
 - deployment role
-- enablement flags for merchant-presented, customer-presented, direct-bank, direct-wallet, and mandate-approval presentments
+- enablement flags for merchant-presented QR/NFC/app handoff, direct operator presentment, and mandate-approval presentments
 
 ## Merchant and wallet expectation
 
 Merchant and wallet software must check capabilities before assuming:
 
 - NFC is available
-- customer-presented tokens are accepted
 - recurring mandate approval can start from presentment
 - a direct bank or wallet endpoint can replace a gateway endpoint
 
@@ -44,7 +43,6 @@ Banks should not partially implement the flow in a way that breaks merchant expe
 1. Merchant-presented QR for one-time payments
 2. Merchant-presented NFC for one-time payments
 3. Merchant-presented QR or NFC for mandate approval
-4. Customer-presented QR or NFC tokens
-5. Direct bank or wallet presented-payment implementations
+4. Direct bank or wallet merchant-presented implementations
 
 This keeps ecosystem adoption predictable and reduces divergent bank behavior early on.

@@ -8,6 +8,8 @@ All events share the same structure:
 
 ```json
 {
+  "id": "evt_01J15D7QZ8S3SM58GQZZZWY6F3",
+  "event_id": "evt_01J15D7QZ8S3SM58GQZZZWY6F3",
   "event": "payment.completed",
   "api_version": "1.0.0",
   "timestamp": "2026-04-24T04:30:00Z",
@@ -83,10 +85,10 @@ After 5 failed attempts, the delivery is marked `FAILED` and visible in the admi
 
 ## Idempotency
 
-Your webhook handler must be **idempotent** — the same event may be delivered more than once (on retry). Use the `session_id` or `event` + `timestamp` combination to deduplicate:
+Your webhook handler must be **idempotent** — the same event may be delivered more than once (on retry). Use the webhook `id` or `event_id` to deduplicate:
 
 ```js
-const key = `${event.event}:${event.data.session_id}`
+const key = event.id ?? event.event_id
 if (await redis.get(key)) return res.json({ received: true }) // already processed
 await redis.set(key, '1', 'EX', 86400)
 // process event...
@@ -98,9 +100,22 @@ await redis.set(key, '1', 'EX', 86400)
 
 | Event | Trigger |
 |:---|:---|
-| `payment.completed` | Funds deducted and transfer confirmed ✅ |
+| `payment.completed` | Final creditor-bank credit confirmed ✅ |
+| `payment.reconciliation_required` | Gateway cannot determine final bank result; do not fulfil until reconciled |
 | `payment.failed` | OTP failure, timeout, or CBS error ❌ |
 | `payment.expired` | Session TTL elapsed before completion ⏱️ |
+| `payment.settlement_pending` | Cross-bank transfer is in flight; final credit is not confirmed yet |
+
+### Refund Events
+
+| Event | Trigger |
+|:---|:---|
+| `refund.created` | Refund request was accepted and recorded |
+| `refund.processing` | Bank or payment rail reversal is underway |
+| `refund.completed` | Refund is final and successful |
+| `refund.failed` | Refund is final and failed with a merchant-safe reason |
+
+Refund events include `refund_id`, `session_id`, `amount`, `currency`, `status`, and, when available, `rail`, `reversal_reference`, and `failure_reason`. Use `refund_id` to update your refund record, and keep event handling idempotent because webhook delivery may be retried.
 
 ### Recurring Mandate Events
 
@@ -110,6 +125,15 @@ await redis.set(key, '1', 'EX', 86400)
 | `mandate.cancelled` | Mandate cancelled by any party |
 | `mandate.charge.completed` | Charge executed successfully |
 | `mandate.charge.failed` | Charge attempt failed |
+
+### Presented Payment Events
+
+| Event | Trigger |
+|:---|:---|
+| `presentment.created` | QR or NFC presentment was created |
+| `presentment.claimed` | Presentment was claimed and bound to a payment session or mandate consent |
+| `presentment.expired` | Presentment expired before claim or completion |
+| `presentment.cancelled` | Presentment was cancelled before claim |
 
 ### Open Banking Events
 

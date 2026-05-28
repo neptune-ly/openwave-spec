@@ -59,7 +59,7 @@ The specification files are valid OpenAPI documents — load them directly into 
 | File | Covers |
 |:---|:---|
 | [`openwave-payments-v1.yaml`](./openwave-payments-v1.yaml) | Payments · Recurring · Alias · Webhooks |
-| [`openwave-presented-payments-v1.yaml`](./openwave-presented-payments-v1.yaml) | QR presentments · NFC handoff · Customer-presented tokens · capability discovery |
+| [`openwave-presented-payments-v1.yaml`](./openwave-presented-payments-v1.yaml) | Merchant-presented QR · NFC handoff · app handoff · capability discovery |
 | [`openwave-open-banking-v1.0.yaml`](./openwave-open-banking-v1.0.yaml) | Open Banking AISP + PISP · OAuth 2.0 + PKCE |
 | [`openwave-credit-finance-v1.yaml`](./openwave-credit-finance-v1.yaml) | Credit assessment · BNPL · Revolving credit · Murabaha · repayment schedules |
 | [`openwave-identity-v1.0.yaml`](./openwave-identity-v1.0.yaml) | Identity Registry · NPT handle ownership · Multi-bank aliases · Governance |
@@ -250,6 +250,8 @@ All events share a common envelope:
 
 ```json
 {
+  "id": "evt_01J15D7QZ8S3SM58GQZZZWY6F3",
+  "event_id": "evt_01J15D7QZ8S3SM58GQZZZWY6F3",
   "event": "payment.completed",
   "api_version": "1.0.0",
   "timestamp": "2026-04-23T20:00:00Z",
@@ -269,9 +271,19 @@ X-OpenWave-Signature: sha256=<HMAC-SHA256(raw_body, webhook_secret)>
 
 | Event | Trigger |
 |:---|:---|
-| `payment.completed` | Funds deducted, transfer confirmed |
+| `payment.completed` | Final creditor-bank credit confirmed |
+| `payment.reconciliation_required` | Gateway cannot determine final bank execution result; merchant must not fulfil until operator reconciliation |
 | `payment.failed` | OTP failure, timeout, or CBS error |
 | `payment.expired` | Session timed out before completion |
+| `payment.settlement_pending` | Cross-bank transfer is in flight; final credit is not confirmed yet |
+| `refund.created` | Refund request was accepted |
+| `refund.processing` | Refund reversal is underway |
+| `refund.completed` | Refund completed successfully |
+| `refund.failed` | Refund failed with a merchant-safe reason |
+| `presentment.created` | QR or NFC presentment was created |
+| `presentment.claimed` | Presentment was claimed |
+| `presentment.expired` | Presentment expired |
+| `presentment.cancelled` | Presentment was cancelled |
 
 **Recurring**
 
@@ -281,6 +293,18 @@ X-OpenWave-Signature: sha256=<HMAC-SHA256(raw_body, webhook_secret)>
 | `mandate.cancelled` | Cancelled by any party |
 | `mandate.charge.completed` | Charge executed successfully |
 | `mandate.charge.failed` | Charge attempt failed |
+
+**Credit & Finance**
+
+| Event | Trigger |
+|:---|:---|
+| `credit_assessment.completed` | Assessment output is ready |
+| `finance_offer.created` | Offer is ready for customer review |
+| `finance_offer.accepted` | Customer accepted terms and repayment schedule |
+| `finance_contract.active` | Finance contract became active |
+| `finance_contract.cancelled` | Finance contract was cancelled |
+| `repayment.completed` | Scheduled repayment collected |
+| `repayment.failed` | Scheduled repayment failed |
 
 **Open Banking**
 

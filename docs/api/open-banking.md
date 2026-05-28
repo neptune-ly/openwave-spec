@@ -27,8 +27,8 @@ The Open Banking API defines consent-based account access and payment initiation
 ```json
 {
   "consent_id": "cns_01HX7W0F4KZK2G8C6TW6EN10XR",
-  "status": "AWAITING_CUSTOMER_AUTH",
-  "authorization_url": "https://gateway.example.com/ob/consent/cns_01HX7W0F4KZK2G8C6TW6EN10XR",
+  "status": "AWAITING_AUTHORISATION",
+  "consent_url": "https://gateway.example.com/ob/consent/cns_01HX7W0F4KZK2G8C6TW6EN10XR",
   "scopes": ["accounts:read", "balances:read", "transactions:read"],
   "expires_at": "2026-08-06T00:00:00Z",
   "code_challenge_method": "S256"
@@ -55,9 +55,9 @@ The Open Banking API defines consent-based account access and payment initiation
   "accounts": [
     {
       "account_id": "acc_01HX7W4QK2A95X2FGPVT7HHBZJ",
-      "bank_id": "andalus",
+      "bank_handle": "andalus",
       "display_name": "Current Account",
-      "masked_iban": "LY83*****************2345",
+      "iban_masked": "LY83*****************2345",
       "currency": "LYD"
     }
   ]

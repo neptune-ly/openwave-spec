@@ -17,6 +17,8 @@ info:
     ## Key Concepts
     - **NPT (National Payment Tag)**: Universal payment identity `username@bank-handle` (e.g. `mtellesy@andalus`)
     - **Payment Session**: Single payment attempt lifecycle from initiation to confirmation
+    - **Refund**: Merchant-created reversal against a completed payment session, using the
+      original bank or payment rail reversal capability when available
     - **Mandate**: Recurring payment authorization granted by a customer to a merchant
     - **Settlement**: Daily batch settlement from gateway settlement accounts to merchants
     - **OpenWave Gateway**: Any compliant server implementing this standard. Gateways can operate independently or interoperate — a merchant on one gateway can reach a customer whose bank is connected to another gateway, because the standard is the contract.
@@ -89,6 +91,10 @@ x-settlement:
       the LyPay transfer instruction is submitted to CBL. The payment is not yet credited
       to the merchant. Merchants should use this to show an "in progress" state.
       Payment advances to COMPLETED (and payment.completed fires) when credit is confirmed.
+    payment.reconciliation_required: >
+      Fires when the gateway cannot determine whether bank execution completed. The merchant
+      must not fulfil goods or services until the operator reconciles the bank result and
+      emits a final payment.completed or payment.failed outcome.
     payment.failed: >
       Fires when LyPay reports status 04 (declined) or 05 (failed), or when session expires.
   status_codes:
@@ -107,6 +113,8 @@ servers:
 tags:
   - name: Payments
     description: Core payment session lifecycle
+  - name: Refunds
+    description: Merchant-created refunds and rail reversals for completed payments
   - name: Recurring
     description: Mandate-based recurring payments
   - name: Webhooks
@@ -131,6 +139,32 @@ paths:
   # ---------------------------------------------------------------------------
   # PAYMENTS — Merchant API
   # ---------------------------------------------------------------------------
+
+  /payments:
+    get:
+      tags: [Payments]
+      summary: List payment sessions
+      description: List recent payment sessions for the authenticated merchant.
+      operationId: listPayments
+      security:
+        - MerchantApiKey: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PaymentStatus'
+          description: Optional status filter. Use `COMPLETED` for externally completed payments.
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Payment sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /payments/initiate:
     post:
@@ -231,6 +265,107 @@ paths:
                 $ref: '#/components/schemas/PaymentStatusResponse'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /payments/{session_id}/refunds:
+    post:
+      tags: [Refunds]
+      summary: Create a refund for a completed payment session
+      description: |
+        Creates a full or partial refund against a completed payment session owned
+        by the authenticated merchant. The requested amount must be in the original
+        payment currency and must not exceed the remaining refundable amount.
+
+        Refund execution reuses the original bank or payment rail reversal capability
+        when available. If the original rail does not support reversal, the gateway
+        may use a compliant fallback credit path while preserving the same refund
+        lifecycle and merchant-safe failure reasons.
+
+        Use `Idempotency-Key` for retry-safe refund creation. Retrying the same key
+        returns the original refund response and must not create a second refund.
+      operationId: createRefund
+      security:
+        - MerchantApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRefundRequest'
+            examples:
+              full_refund:
+                summary: Refund the full remaining amount
+                value:
+                  amount: 50000
+                  currency: LYD
+                  merchant_reference: ORD-1042-RF-1
+                  reason: CUSTOMER_RETURN
+              partial_refund:
+                summary: Refund part of the payment
+                value:
+                  amount: 12500
+                  currency: LYD
+                  merchant_reference: ORD-1042-RF-2
+                  reason: PARTIAL_RETURN
+      responses:
+        '201':
+          description: Refund created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    get:
+      tags: [Refunds]
+      summary: List refunds for a payment session
+      operationId: listPaymentRefunds
+      security:
+        - MerchantApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Refunds for the payment session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /payments/refunds/{refund_id}:
+    get:
+      tags: [Refunds]
+      summary: Get refund status
+      description: Poll the current status of a refund. Signed webhook events remain the preferred notification channel.
+      operationId: getRefund
+      security:
+        - MerchantApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/RefundId'
+      responses:
+        '200':
+          description: Refund details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ---------------------------------------------------------------------------
   # SESSION API — Customer-facing (SDK webview, session-scoped token)
@@ -1256,6 +1391,13 @@ components:
         type: string
         format: uuid
       description: Payment session UUID
+    RefundId:
+      name: refund_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Refund identifier
     MandateId:
       name: mandate_id
       in: path
@@ -1631,6 +1773,45 @@ components:
         - COMPLETED
         - FAILED
 
+    RefundStatus:
+      type: string
+      enum:
+        - CREATED
+        - PROCESSING
+        - COMPLETED
+        - FAILED
+      description: |
+        Lifecycle status of a refund.
+        - `CREATED`: Refund request accepted and recorded.
+        - `PROCESSING`: Bank or payment rail reversal is underway.
+        - `COMPLETED`: Refund is final and successful.
+        - `FAILED`: Refund is final and did not complete.
+
+    RefundFailureReason:
+      type: string
+      enum:
+        - PAYMENT_NOT_COMPLETED
+        - AMOUNT_EXCEEDS_REFUNDABLE
+        - CURRENCY_MISMATCH
+        - DUPLICATE_REQUEST
+        - REFUND_WINDOW_EXPIRED
+        - REVERSAL_NOT_SUPPORTED
+        - BANK_REJECTED
+        - RAIL_UNAVAILABLE
+        - TEMPORARY_PROCESSING_ERROR
+        - COMPLIANCE_REVIEW
+        - UNKNOWN
+      description: Merchant-safe refund failure category. It must not expose sensitive payer, bank, or compliance details.
+
+    RefundRail:
+      type: string
+      enum:
+        - SAME_BANK_REVERSAL
+        - LYPAY_REVERSAL
+        - CREDIT_TRANSFER_FALLBACK
+        - MANUAL_ADJUSTMENT
+      description: Execution path used for the refund or reversal.
+
     CancelledBy:
       type: string
       enum:
@@ -1695,6 +1876,15 @@ components:
             cart_id: "cart_abc123"
             customer_email: "customer@example.com"
 
+    PaymentDestination:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [alias, iban]
+        value:
+          type: string
+
     PaymentInitiateResponse:
       type: object
       properties:
@@ -1705,8 +1895,29 @@ components:
           type: string
           format: uri
           description: URL to open in SDK webview or redirect the customer to
+        checkout_url:
+          type: string
+          format: uri
+          description: Alias of payment_url retained for SDK compatibility
+        checkout_session_token:
+          type: string
+          nullable: true
+          description: Short-lived token official SDKs must send as X-Session-Token for checkout step calls
         status:
           $ref: '#/components/schemas/PaymentStatus'
+        amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        description:
+          type: string
+        destination:
+          $ref: '#/components/schemas/PaymentDestination'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
         expires_at:
           type: string
           format: date-time
@@ -1762,6 +1973,136 @@ components:
         metadata:
           type: object
           additionalProperties: true
+
+    PaymentListResponse:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentStatusResponse'
+        pagination:
+          type: object
+          properties:
+            limit:
+              type: integer
+            has_more:
+              type: boolean
+
+    # --- Refunds ---
+
+    CreateRefundRequest:
+      type: object
+      required:
+        - amount
+        - currency
+        - merchant_reference
+      properties:
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Refund amount in minor units. Use the remaining refundable amount for a full refund, or a smaller amount for a partial refund.
+          example: 12500
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code. Must match the original payment currency.
+          example: LYD
+        merchant_reference:
+          type: string
+          maxLength: 128
+          description: Merchant refund reference for reconciliation and support.
+          example: ORD-1042-RF-1
+        reason:
+          type: string
+          maxLength: 64
+          description: Optional merchant-provided reason code. Gateways should treat this as merchant metadata, not as a standardized failure reason.
+          example: CUSTOMER_RETURN
+        metadata:
+          type: object
+          additionalProperties: true
+
+    RefundResponse:
+      type: object
+      properties:
+        refund_id:
+          type: string
+          example: rfd_01HX8B3W4QG7TK2V4R9MB8K2YX
+        session_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/RefundStatus'
+        amount:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        merchant_reference:
+          type: string
+        original_payment_amount:
+          type: integer
+          format: int64
+          description: Original payment amount in minor units.
+        refundable_amount_before:
+          type: integer
+          format: int64
+          description: Remaining refundable amount before this refund was created.
+        refundable_amount_after:
+          type: integer
+          format: int64
+          description: Remaining refundable amount after this refund is reserved or completed.
+        rail:
+          $ref: '#/components/schemas/RefundRail'
+          nullable: true
+        reversal_reference:
+          type: string
+          nullable: true
+          description: Bank or rail reversal reference, when available.
+        failure_reason:
+          $ref: '#/components/schemas/RefundFailureReason'
+          nullable: true
+        failure_message:
+          type: string
+          nullable: true
+          description: Merchant-safe human-readable failure summary.
+        idempotency_key:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        processing_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+
+    RefundListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundResponse'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
 
     # --- Session (SDK/Webview) ---
 
@@ -2126,8 +2467,8 @@ components:
         core_base_url:
           type: string
           format: uri
-          description: Base URL of the bank's core banking system (any OpenWave-compatible core)
-          example: https://api.andalus.ly
+          description: Base URL of the bank's OpenWave-compatible callback interface. The gateway appends standard operations such as /send-otp and /execute-transaction.
+          example: https://bank.example.com/api/v1/openwave
         settlement_account_iban:
           type: string
           description: IBAN of the gateway settlement account held at this bank
@@ -2247,6 +2588,8 @@ components:
 # All webhook bodies follow this envelope:
 #
 # {
+#   "id": "evt_01J15D7QZ8S3SM58GQZZZWY6F3",        // canonical event ID
+#   "event_id": "evt_01J15D7QZ8S3SM58GQZZZWY6F3",  // optional SDK-compatible mirror
 #   "event": "payment.completed",          // event type
 #   "gateway": "openwave-gateway",         // gateway identifier
 #   "api_version": "1.0.0",
@@ -2259,10 +2602,17 @@ components:
 #   Computed: HMAC-SHA256(raw_body, merchant_webhook_secret)
 #
 # Event Types:
-#   payment.completed           — debit AND credit both confirmed; payment fully settled
+#   payment.completed           — final creditor-bank credit confirmed
 #   payment.settlement_pending  — debit confirmed at debtor bank; LyPay transfer in-flight
 #                                  to creditor bank (cross-bank only). Fires before
 #                                  payment.completed so merchant can show "processing" state.
+#   payment.reconciliation_required
+#                                — final bank execution result is unknown; merchant must
+#                                  hold fulfilment until operator reconciliation completes.
+#   refund.created              — refund resource accepted and recorded
+#   refund.processing           — bank or rail reversal has started
+#   refund.completed            — refund is final and successful
+#   refund.failed               — refund is final and failed with a merchant-safe reason
 #   payment.failed              — payment_session failed (OTP wrong, timeout, CBS error)
 #   payment.expired             — session expired without completion
 #   mandate.activated           — customer consented to mandate

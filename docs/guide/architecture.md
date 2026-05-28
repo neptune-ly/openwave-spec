@@ -126,7 +126,7 @@ Credit & Finance is not a new settlement rail and not a credit bureau. It standa
 Merchants integrate the gateway **once** and accept payments from customers at any participating bank.
 
 - Authenticate with a **merchant API key** (`Authorization: Bearer <key>`)
-- Create payment sessions via `POST /payments/sessions`
+- Create payment sessions via `POST /payments/initiate`
 - Receive outcomes via **signed webhooks** (`X-OpenWave-Signature`)
 - Never talk to banks directly — the gateway handles all bank routing
 
@@ -134,7 +134,7 @@ Merchants integrate the gateway **once** and accept payments from customers at a
 Banks expose a **standardised callback interface** to the gateway. The gateway calls the bank's core banking system (CBS) to verify identities, trigger debits, and receive credits.
 
 - Authenticate inbound gateway calls with a **bank API key** (`X-OpenWave-Bank-Key`)
-- Implement endpoints: `resolve-alias`, `send-otp`, `verify-otp`, `send-push`, `execute-transaction`, `notify-credit`
+- Implement endpoints: `resolve-alias`, `send-otp`, `verify-otp`, `send-push`, `execute-transaction`, `refund-transaction`, `notify-credit`
 - Enroll in **CBL NAD** so customers can receive payments by alias
 - Connect to **CBL LyPay** for cross-bank outbound transfers and inbound credit callbacks
 
@@ -248,7 +248,7 @@ Customer (Bank A)    Gateway       Bank A CBS      CBL LyPay     Bank B CBS    M
                       │           Payment Session                │
                       └─────────────────────────────────────────┘
 
-     [merchant calls POST /payments/sessions]
+     [merchant calls POST /payments/initiate]
                       │
                       ▼
                   PENDING ──────────────────────────────────► EXPIRED
@@ -286,7 +286,7 @@ The gateway is **not a bank**. It routes. The bank handles OTP generation, custo
 ```
 Merchant (backend)
   │
-  │  POST /api/v1/payments/sessions
+  │  POST /api/v1/payments/initiate
   │  { amount, currency, description, destination }
   │
   ▼
@@ -294,13 +294,13 @@ Gateway → creates PaymentSession (status: PENDING) → returns { session_id, c
   │
 Customer (browser / mobile)
   │
-  │  POST /api/v1/payments/sessions/{id}/resolve-payer
+  │  POST /api/v1/session/{session_id}/resolve-payer
   │  { payer_iban OR payer_alias }
   │
   ▼
 Gateway → resolves bank via IBAN prefix / NAD alias → returns { bank_handle, auth_modes }
   │
-  │  POST /api/v1/payments/sessions/{id}/select-auth  { auth_mode: "OTP" }
+  │  POST /api/v1/session/{session_id}/select-auth  { auth_mode: "OTP" }
   │
   ▼
 Gateway → POST {bank.coreBaseUrl}/send-otp  { session_id, payer_iban }
@@ -310,7 +310,7 @@ Gateway → POST {bank.coreBaseUrl}/send-otp  { session_id, payer_iban }
   ▼
 Gateway → session status: OTP_SENT → returns { otp_token, phone_masked }
   │
-  │  POST /api/v1/payments/sessions/{id}/confirm  { otp_code }
+  │  POST /api/v1/session/{session_id}/confirm-otp  { otp_code }
   │
   ▼
 Gateway → POST {bank.coreBaseUrl}/verify-otp  { session_id, otp_token, otp_code }

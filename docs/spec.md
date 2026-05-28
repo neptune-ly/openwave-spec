@@ -19,7 +19,7 @@ curl https://raw.githubusercontent.com/neptune-ly/openwave-spec/main/openwave-pa
 
 ## openwave-presented-payments-v1.yaml
 
-**Covers:** Merchant-presented and customer-presented QR/NFC, presentment creation and claim, direct bank and wallet implementation patterns, and capability discovery
+**Covers:** Merchant-presented QR/NFC/app handoff, presentment creation and claim, customer review summaries, direct operator implementation patterns, and capability discovery
 
 → [View on GitHub](https://github.com/neptune-ly/openwave-spec/blob/main/openwave-presented-payments-v1.yaml)<br>
 → [Raw YAML](https://raw.githubusercontent.com/neptune-ly/openwave-spec/main/openwave-presented-payments-v1.yaml)

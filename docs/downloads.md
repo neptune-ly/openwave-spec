@@ -21,20 +21,22 @@ Covers payment sessions, NPT alias routing, recurring mandates, webhooks, and ba
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/payments/initiate` | Create a payment session |
-| `GET` | `/payments/{id}/status` | Poll payment status |
+| `GET` | `/payments/{session_id}` | Poll payment status |
 | `POST` | `/session/{id}/resolve-payer` | Resolve payer alias or IBAN |
+| `POST` | `/session/{id}/select-auth` | Start customer OTP or push authorization |
 | `POST` | `/session/{id}/confirm-otp` | Confirm OTP auth |
-| `POST` | `/aliases/register` | Register an NPT alias |
-| `GET` | `/aliases/{alias}` | Look up an alias |
-| `POST` | `/mandates/create` | Create recurring mandate |
-| `POST` | `/bank/callback/execute-transaction` | Bank executes unified debit+route |
-| `POST` | `/bank/callback/notify-credit` | Bank confirms credit to merchant |
+| `POST` | `/alias/enroll` | Enroll an NPT alias through the registry-backed flow |
+| `GET` | `/alias/{alias}` | Look up a registered alias |
+| `POST` | `/recurring/mandates` | Create recurring mandate |
+| `GET` | `/webhooks` | List webhook deliveries |
+| `GET` | `/webhooks/session/{session_id}` | List deliveries for a payment session |
+| `POST` | `/webhooks/{delivery_id}/retry` | Retry a failed webhook delivery |
 
 ---
 
 ### Presented Payments API — `openwave-presented-payments-v1.yaml`
 
-Covers merchant-presented and customer-presented QR and NFC flows, direct bank or wallet implementation patterns, and channel capability discovery.
+Covers merchant-presented QR, NFC, and app/wallet handoff flows, direct operator implementation patterns, customer review summaries, and channel capability discovery.
 
 <div class="ow-dl-row">
   <a class="ow-dl-btn" href="https://raw.githubusercontent.com/neptune-ly/openwave-spec/main/openwave-presented-payments-v1.yaml" download>Download YAML</a>

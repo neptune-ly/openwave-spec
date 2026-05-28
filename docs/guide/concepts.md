@@ -19,7 +19,7 @@ Always pair `amount` with a `currency` field (ISO 4217: `LYD`, `USD`, `EUR`).
 Every payment starts as a **session** — a time-limited intent to pay.
 
 ```
-CREATE SESSION          POST /payments/sessions
+CREATE SESSION          POST /payments/initiate
       ↓
    PENDING              Waiting for customer action
       ↓
@@ -99,7 +99,7 @@ function verifyWebhook(rawBody, signature, secret) {
 For `POST` requests that create resources, include an `Idempotency-Key` header to safely retry on network errors:
 
 ```http
-POST /payments/sessions
+POST /payments/initiate
 Idempotency-Key: <unique-uuid-per-request>
 ```
 
@@ -110,7 +110,7 @@ The gateway deduplicates by key for 24 hours. Safe to retry.
 List endpoints use cursor-based pagination:
 
 ```http
-GET /payments/sessions?limit=20&cursor=sess_abc123
+GET /payments/initiate?limit=20&cursor=sess_abc123
 ```
 
 Response:

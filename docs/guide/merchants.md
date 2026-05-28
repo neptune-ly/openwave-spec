@@ -34,7 +34,7 @@ Use `mk_test_...` keys during development. Test mode payments never touch real f
 From your **backend** (never from the browser — your API key stays server-side):
 
 ```http
-POST /api/v1/payments/sessions
+POST /api/v1/payments/initiate
 Authorization: Bearer mk_live_...
 Content-Type: application/json
 
@@ -118,7 +118,7 @@ app.post('/webhooks/openwave', express.raw({ type: 'application/json' }), (req, 
 
 | Event | When |
 |:---|:---|
-| `payment.completed` | Funds deducted, transfer confirmed ✅ |
+| `payment.completed` | Final creditor-bank credit confirmed ✅ |
 | `payment.failed` | OTP failure, timeout, or CBS error ❌ |
 | `payment.expired` | Session timed out before completion ⏱️ |
 
@@ -127,9 +127,55 @@ app.post('/webhooks/openwave', express.raw({ type: 'application/json' }), (req, 
 After receiving the webhook, you can verify the session status directly:
 
 ```http
-GET /api/v1/payments/sessions/{session_id}
+GET /api/v1/payments/{session_id}
 Authorization: Bearer mk_live_...
 ```
+
+## Refund a Completed Payment
+
+Create refunds from your backend after a payment has reached `COMPLETED`. Refunds can be full or partial, and every create request should include an `Idempotency-Key` so a network retry cannot duplicate money movement.
+
+```http
+POST /api/v1/payments/{session_id}/refunds
+Authorization: Bearer mk_live_...
+Idempotency-Key: refund-order-1042-1
+Content-Type: application/json
+
+{
+  "amount": 12500,
+  "currency": "LYD",
+  "merchant_reference": "order_1042_refund_1",
+  "reason": "PARTIAL_RETURN"
+}
+```
+
+Use the remaining refundable amount for a full refund, or a smaller amount for a partial refund. The currency must match the original payment.
+
+```json
+{
+  "refund_id": "rfd_01HX8B3W4QG7TK2V4R9MB8K2YX",
+  "session_id": "ops_01HZGV...",
+  "status": "PROCESSING",
+  "amount": 12500,
+  "currency": "LYD",
+  "merchant_reference": "order_1042_refund_1",
+  "rail": "LYPAY_REVERSAL",
+  "failure_reason": null
+}
+```
+
+OpenWave uses the original bank or payment rail reversal when it is available. Same-bank payments should reverse through the bank ledger, and cross-bank rail payments should use the rail-native reversal or return path. If the original rail cannot reverse the transfer, the gateway may use a compliant fallback credit transfer while keeping the same refund status and webhook semantics.
+
+### Refund Events
+
+| Event | When |
+|:---|:---|
+| `refund.created` | Refund was accepted and recorded |
+| `refund.processing` | Bank or rail reversal started |
+| `refund.completed` | Refund is final and successful |
+| `refund.failed` | Refund is final and failed with a safe reason |
+
+`refund.failed` includes a merchant-safe `failure_reason` such as `AMOUNT_EXCEEDS_REFUNDABLE`, `REFUND_WINDOW_EXPIRED`, `REVERSAL_NOT_SUPPORTED`, `BANK_REJECTED`, `RAIL_UNAVAILABLE`, or `TEMPORARY_PROCESSING_ERROR`. Do not expect raw bank or payer details in failure responses.
 
 ## Destination Types
 
@@ -148,7 +194,7 @@ When a customer pays you, the money flows differently depending on whether you a
 | **Same bank** | Internal CBS book transfer — instant debit and credit | < 1 second |
 | **Different banks** | Customer's bank debits, sends via **CBL LyPay** to your bank, your bank credits | 2–10 seconds |
 
-**You only need to act on `payment.completed`** — this webhook fires only after the credit at your bank is confirmed. Never fulfil an order on `payment.initiated` or `payment.processing` alone.
+**You only need to act on `payment.completed`** — this webhook fires only after the credit at your bank is confirmed. Never fulfil an order from a non-final hosted checkout state alone.
 
 ```json
 {
@@ -195,13 +241,12 @@ POST /recurring/mandates/{mandate_id}/charge
 
 ## Presented Payments
 
-Use presented flows when the customer starts from a merchant screen, a POS, or a wallet handoff:
+Use presented flows when the customer starts from a merchant screen, POS, or merchant-initiated wallet handoff:
 
 | Mode | Use when | What you send |
 |---|---|---|
 | `MERCHANT_PRESENTED` + `ONE_TIME_PAYMENT` | Storefront, POS, bill-pay page | Fixed or open-amount presentment |
 | `MERCHANT_PRESENTED` + `MANDATE_APPROVAL` | Subscription signup, instalment approval | Mandate approval presentment |
-| `CUSTOMER_PRESENTED` + `ONE_TIME_PAYMENT` | Customer wallet token shown to merchant | Customer-presented token claim |
 
 Merchants must not collect OTP, PIN, or push approval results in their own UI. The QR or NFC payload only hands the customer into the trusted hosted or official SDK surface.
 

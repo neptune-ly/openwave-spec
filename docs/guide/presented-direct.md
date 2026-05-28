@@ -1,4 +1,4 @@
-# Direct Bank and Wallet Implementation
+# Direct Operator Implementation
 
 Presented payments are not restricted to commercial gateway products.
 
@@ -39,7 +39,7 @@ A wallet or payment app may implement presented payments when:
 
 ## Interoperability outcome
 
-This model allows channel innovation without fragmenting the network contract. A merchant or wallet reads capabilities, creates or claims a presentment, and then hands into the same trusted payment system regardless of whether the operator behind it is a gateway, bank, or wallet.
+This model allows channel innovation without fragmenting the network contract. A merchant, bank, or wallet reads capabilities, creates a merchant-presented presentment, and then hands into the same trusted payment system regardless of whether the operator behind it is a gateway, bank, or wallet.
 
 ## Minimum compliance checklist
 
@@ -53,4 +53,4 @@ This model allows channel innovation without fragmenting the network contract. A
 
 ## What Astro represents in this model
 
-Neptune. Astro is one **gateway implementation** of this standard. It can support merchant-presented and customer-presented flows, but the standard is still valid even when a bank or wallet implements the same APIs directly.
+Neptune. Astro is one **gateway implementation** of this standard. It supports merchant-presented flows, but the standard is still valid when a bank or wallet operates the same merchant-presented APIs directly for its merchants or acceptors.
