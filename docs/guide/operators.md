@@ -31,6 +31,20 @@ Any implementation can be compliant if it follows the OpenAPI contracts, securit
 | TLS | All endpoints must be HTTPS in production |
 | Webhooks | Async delivery with retry queue (Redis Streams or equivalent) |
 
+### Production Control Plane
+
+A production gateway should expose an operator control plane for sandbox/live readiness, client branding, credential rotation, and audit review.
+
+| Control | Requirement |
+|---|---|
+| Sandbox/live separation | distinct base URLs and credentials; no request flag controls environment |
+| Branding | bank, merchant, and TPP logos/display names available to customer-facing approval screens |
+| Readiness | `READY`, `INCOMPLETE`, and `DISABLED` states visible per client and environment |
+| Security | secure-link password reset, passkeys, active sessions, recent auth events |
+| Audit | create/update/rotate/reset/upload actions logged without raw secrets |
+
+See [Production Readiness](./production-readiness.md) for the deployment baseline.
+
 ### Architecture Overview
 
 ```

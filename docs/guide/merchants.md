@@ -29,6 +29,23 @@ Authorization: Bearer mk_live_...
 Use `mk_test_...` keys during development. Test mode payments never touch real funds.
 :::
 
+## Sandbox, Live, and Branding
+
+Sandbox and live access must be separate. A merchant should receive a sandbox base URL and sandbox credential for testing, and a live base URL and live credential only after production review. Do not use a request flag to turn a live credential into a sandbox transaction.
+
+Before live enablement, configure:
+
+- merchant display name,
+- logo URL or uploaded logo,
+- brand color,
+- support email,
+- website,
+- webhook URL,
+- allowed SDK origins,
+- settlement account or merchant IBAN where required by the operator.
+
+Hosted checkout, presented QR/NFC review, recurring approval, Open Banking consent, and SDK surfaces should show the merchant logo/display name and the acquiring bank or gateway operator identity. See [Production Readiness](./production-readiness.md).
+
 ## Step 2 — Create a Payment Session
 
 From your **backend** (never from the browser — your API key stays server-side):
