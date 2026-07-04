@@ -1235,6 +1235,162 @@ paths:
   # WEBHOOKS — Delivery Log
   # ---------------------------------------------------------------------------
 
+  /reports/payments:
+    get:
+      tags: [Reports]
+      summary: List merchant payment report rows
+      operationId: listMerchantPaymentReport
+      security:
+        - MerchantApiKey: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, OTP_SENT, PUSH_SENT, EXECUTING, CONFIRMED, SETTLEMENT_PENDING, RECONCILE_REQUIRED, FAILED, EXPIRED, CANCELLED]
+        - name: environment
+          in: query
+          schema:
+            type: string
+            enum: [SANDBOX, LIVE]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: Paginated merchant payment report or CSV export.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payments:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+                  has_next:
+                    type: boolean
+                  has_previous:
+                    type: boolean
+            text/csv:
+              schema:
+                type: string
+
+  /reports/settlements:
+    get:
+      tags: [Reports]
+      summary: List merchant settlement and payout report rows
+      operationId: listMerchantSettlementReport
+      security:
+        - MerchantApiKey: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: Paginated merchant settlement report or CSV export.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settlements:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+                  total:
+                    type: integer
+                  total_pages:
+                    type: integer
+            text/csv:
+              schema:
+                type: string
+
+  /reports/readiness:
+    get:
+      tags: [Reports]
+      summary: Get merchant go-live readiness
+      operationId: getMerchantReadinessReport
+      security:
+        - MerchantApiKey: []
+      responses:
+        '200':
+          description: Merchant sandbox/live readiness state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [READY, INCOMPLETE, DISABLED]
+                  missing:
+                    type: array
+                    items:
+                      type: string
+                  environments:
+                    type: object
+                    additionalProperties: true
+                  webhook_configured:
+                    type: boolean
+
   /webhooks:
     get:
       tags: [Webhooks]
@@ -1242,9 +1398,38 @@ paths:
       operationId: listWebhookDeliveries
       security:
         - MerchantApiKey: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, PROCESSING, DELIVERED, FAILED]
+        - name: event_type
+          in: query
+          schema:
+            type: string
+          example: payment.completed
+        - name: include_payload
+          in: query
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
-          description: Delivery log
+          description: Paginated delivery log, including failed or missed deliveries available for recovery.
           content:
             application/json:
               schema:
@@ -1254,8 +1439,45 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/WebhookDelivery'
+                  stats:
+                    type: object
+                    additionalProperties: true
                   total:
                     type: integer
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+                  total_pages:
+                    type: integer
+                  has_next:
+                    type: boolean
+                  has_previous:
+                    type: boolean
+
+  /webhooks/{delivery_id}:
+    get:
+      tags: [Webhooks]
+      summary: Get a webhook delivery with payload for recovery or reconciliation
+      operationId: getWebhookDelivery
+      security:
+        - MerchantApiKey: []
+      parameters:
+        - name: delivery_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Webhook delivery detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDelivery'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /webhooks/session/{session_id}:
     get:
@@ -1689,7 +1911,7 @@ components:
           example: payment.completed
         status:
           type: string
-          enum: [PENDING, DELIVERED, FAILED]
+          enum: [PENDING, PROCESSING, DELIVERED, FAILED]
         attempt_count:
           type: integer
         last_response_status:
@@ -1697,6 +1919,10 @@ components:
           nullable: true
           example: 200
         last_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_retry_at:
           type: string
           format: date-time
           nullable: true
@@ -1711,6 +1937,17 @@ components:
         created_at:
           type: string
           format: date-time
+        payload_available:
+          type: boolean
+        recoverable:
+          type: boolean
+        payload:
+          type: object
+          additionalProperties: true
+          description: Present when requested through detail endpoint or `include_payload=true`.
+        raw_payload:
+          type: string
+          description: Raw JSON body delivered to the merchant endpoint.
 
     # --- Enums ---
 

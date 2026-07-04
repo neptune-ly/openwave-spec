@@ -63,9 +63,18 @@ Browse and test the full API surface in your browser.
 | Method | Path | Description |
 |:---|:---|:---|
 | `GET` | `/webhooks` | List webhook deliveries |
+| `GET` | `/webhooks/{delivery_id}` | Inspect one delivery, including payload |
 | `GET` | `/webhooks/session/{session_id}` | List deliveries for a payment session |
 | `POST` | `/webhooks/{delivery_id}/retry` | Retry failed delivery |
 | `POST` | `/webhooks/test` | Send a signed test webhook |
+
+### Merchant Reports
+
+| Method | Path | Description |
+|:---|:---|:---|
+| `GET` | `/reports/payments` | Paginated merchant payment report |
+| `GET` | `/reports/settlements` | Paginated merchant settlement/payout report |
+| `GET` | `/reports/readiness` | Merchant sandbox/live go-live readiness |
 
 ### Open Banking (`openwave-open-banking-v1.0.yaml`)
 

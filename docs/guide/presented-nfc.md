@@ -17,6 +17,15 @@ NFC gives the same trust model as QR but with a different user experience:
 - Target uses: merchant-presented handoff only in v1
 - The claim response must provide a customer review summary and then open or return a hosted checkout URL, secure SDK sheet, wallet handoff, or bank-app handoff session before any authorization or completion state
 
+## Backend readiness vs mobile runtime
+
+NFC support should be exposed in two steps:
+
+1. **Backend readiness**: the operator can create NFC presentments, return an NDEF URI payload, validate expiry/replay rules, and claim the presentment into the normal payment or mandate lifecycle.
+2. **Runtime readiness**: the bank app or wallet has shipped NFC platform support, permissions, entitlements, QA evidence, and store metadata.
+
+Capability metadata should not imply customer-facing NFC is available until both are true. Deployments may advertise backend readiness while keeping `merchant_presented_nfc` false for customer runtimes.
+
 ## Example NDEF payload
 
 ```json

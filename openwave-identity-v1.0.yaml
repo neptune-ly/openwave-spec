@@ -5,8 +5,11 @@ info:
   description: |
     # OpenWave Identity API v1.0
 
-    The OpenWave Identity Registry is the global, open-source identity layer for the
-    OpenWave payment network. It is currently operated by **Neptune Fintech** under a
+    The OpenWave Identity Registry is the global, open-source bank-vouched digital
+    identity and payment identity layer for the OpenWave network. In Libya-oriented
+    deployments it is intended to preserve customer payment identity continuity across
+    participating banks while keeping KYC, authentication, and regulated account
+    servicing inside the banks themselves. It is currently operated by **Neptune Fintech** under a
     published open governance charter, with the explicit intent to transfer stewardship
     to a neutral body — such as the **Central Bank of Libya** or a bank consortium —
     as the network matures.
@@ -44,6 +47,21 @@ info:
       no authentication and is designed to be cached by gateways.
     - **First-come, first-served** — handles are unique globally. Disputes are
       resolved through the registered bank.
+
+    ---
+
+    ## Implementation Neutrality
+
+    The standard does not require a bank to run Neptune products, Nexus, Andalus
+    Laravel, or any specific middleware stack.
+
+    A participating bank may:
+
+    - connect directly from its own middleware or core integration layer
+    - deploy a lightweight adapter only for OpenWave-facing contracts
+    - use Neptune implementations as one possible deployment path
+
+    The normative requirement is the OpenWave contract, not the operator's internal architecture.
 
     ---
 

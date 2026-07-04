@@ -6,6 +6,35 @@ OpenWave QR payloads use an **EMVCo-compatible QR profile** with an OpenWave mer
 
 The QR must be portable across operators and easy for banks or wallets to understand, while still forcing the real authorization to happen later in a secure surface.
 
+## Smart scanner behavior
+
+A bank, wallet, or payment app should expose **one payment QR scanner** when it already supports domestic QR rails. The scanner routes by payload, not by which button launched the camera.
+
+```mermaid
+flowchart TD
+  A["Customer taps Scan QR"] --> B["Parse payload"]
+  B --> C{"OpenWave URI / app link?"}
+  C -- yes --> OW["Claim OpenWave presentment"]
+  C -- no --> D{"EMV QR with LY.OPENWAVE GUI?"}
+  D -- yes --> OW
+  D -- no --> E{"Known domestic QR profile?"}
+  E -- yes --> L["Continue existing domestic QR flow"]
+  E -- no --> U["Show unsupported QR error"]
+  OW --> R["Show secure customer review"]
+  L --> R2["Show existing domestic QR review"]
+```
+
+This keeps the customer experience simple: one scan entry point can recognize:
+
+- domestic static QR
+- domestic dynamic QR
+- internal bank transfer QR
+- LyPay / NUMO QR where supported
+- OpenWave merchant-presented payment QR
+- OpenWave merchant-presented mandate approval QR
+
+Scanners must not route based on the visual logo in the middle of the QR. The logo is a customer-recognition cue only. Routing must use the URI or EMV payload identifiers.
+
 ## Payload rules
 
 - Must identify the presentment
@@ -72,6 +101,59 @@ flowchart TD
   E -- yes --> L["Route to existing domestic QR payment"]
   E -- no --> U["Unsupported EMV QR"]
 ```
+
+## Visual and UI guidelines
+
+OpenWave QR needs a consistent visual treatment so customers can recognize it across gateways, banks, wallets, POS terminals, invoices, and merchant checkout pages. Visual branding must never become the security control.
+
+### Required visual rules
+
+| Rule | Requirement |
+|---|---|
+| Quiet zone | Keep at least 4 QR modules of clear quiet zone around the code. |
+| Error correction | Use level `H` when a center mark is placed inside the QR. Use at least `Q` for high-density printed or low-quality displays. |
+| Center mark | Prefer the simple OpenWave mark in the center for OpenWave-presented QR. Keep it compact and high contrast. |
+| Center mark size | Do not cover more than 15% of the QR symbol area unless the QR generator validates scannability on common devices. |
+| Payload routing | Scanner routing must use `openwave://`, HTTPS app/universal link, or EMV GUI `LY.OPENWAVE`, not the center logo. |
+| Caption | Use a short caption such as `Pay with OpenWave` or localized equivalent. |
+| Review screen | After scan, show merchant, amount, currency, expiry, account, fees, and recurring terms where applicable before approval. |
+
+### Recommended QR frame
+
+Use a clean payment frame:
+
+- OpenWave mark centered in the QR.
+- Merchant or operator name below the QR.
+- Amount near the QR for fixed-amount flows.
+- Expiry or “valid until” when the presentment is short-lived.
+- “Scan with your bank or OpenWave-compatible wallet” when the merchant surface is public.
+
+Do not place OTPs, bank credentials, approval words, or customer secrets beside the QR.
+
+### Center mark shape
+
+The OpenWave mark should be simple enough to stay legible at small POS and receipt sizes:
+
+- one compact wave or connected-payment symbol
+- one color or monochrome depending on background
+- no long wordmark inside the QR
+- no thin detail that disappears below 24 px
+
+Operator or merchant marks may be shown around the QR frame, but the center mark should remain OpenWave when the payload is an OpenWave presentment. This gives customers one network-level recognition cue, similar to national QR payment marks in other markets.
+
+### App UI guideline
+
+Customer apps should label the camera entry point as a smart QR payment scanner, not as a separate OpenWave-only scanner, when domestic QR and OpenWave QR share the same camera flow.
+
+Recommended labels:
+
+| Context | Label |
+|---|---|
+| Floating pay action | `Scan QR` |
+| QR page row | `Smart QR scan` |
+| Description | `Detects domestic and OpenWave QR automatically` |
+
+If the app only supports OpenWave QR and no domestic QR scheme, `Scan OpenWave QR` is acceptable.
 
 ## Recommended payload fields
 

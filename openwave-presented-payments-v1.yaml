@@ -235,6 +235,13 @@ components:
           type: boolean
         merchant_presented_nfc:
           type: boolean
+          description: True only when merchant-presented NFC is available to customer runtimes for this deployment.
+        merchant_presented_nfc_backend_ready:
+          type: boolean
+          description: Indicates the operator backend can create and claim NFC presentments, even if no customer app runtime has been released with NFC permissions yet.
+        merchant_presented_nfc_runtime_ready:
+          type: boolean
+          description: Indicates customer-facing apps or wallets are allowed to expose NFC read/tap UI for this deployment.
         app_handoff:
           type: boolean
           description: Enables app, universal-link, deep-link, or platform wallet handoff using the same presentment claim contract.
@@ -428,6 +435,40 @@ components:
           enum: [SVG_OR_PNG]
         value:
           type: string
+        visual_guidance:
+          $ref: '#/components/schemas/QrVisualGuidance'
+    QrVisualGuidance:
+      type: object
+      description: >
+        Non-security rendering guidance for OpenWave-branded QR display. Scanners
+        must route from the payload, not from logo detection. The center mark is
+        only a trust and recognition cue for customers.
+      properties:
+        center_mark:
+          type: string
+          enum: [OPENWAVE_MARK, OPERATOR_MARK, MERCHANT_MARK, NONE]
+          default: OPENWAVE_MARK
+        center_mark_max_module_area_percent:
+          type: integer
+          minimum: 0
+          maximum: 20
+          default: 15
+          description: Maximum percentage of the QR symbol area that may be covered by a center mark when error correction allows it.
+        quiet_zone_modules:
+          type: integer
+          minimum: 4
+          default: 4
+        error_correction_level:
+          type: string
+          enum: [M, Q, H]
+          default: H
+        recommended_caption:
+          type: string
+          example: Pay with OpenWave
+        scanner_behavior:
+          type: string
+          enum: [SMART_ROUTE_BY_PAYLOAD]
+          default: SMART_ROUTE_BY_PAYLOAD
     NfcPayload:
       type: object
       properties:

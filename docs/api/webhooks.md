@@ -31,6 +31,9 @@ Webhooks are the final notification channel for merchants, gateways, banks, and 
 | `presentment.claimed` | Presentment was claimed and bound to a payment session or mandate consent. |
 | `presentment.expired` | Presentment expired before claim or completion. |
 | `presentment.cancelled` | Presentment was cancelled before claim. |
+| `merchant.account.transaction.posted` | A bank-origin merchant account transaction was posted and affects the merchant. |
+| `merchant.account.transaction.updated` | Additional bank reference data became available for a prior merchant account transaction. |
+| `webhook.test` | Operator or merchant portal test event. |
 
 ## Example event
 
@@ -78,6 +81,51 @@ Refund events use the same signed envelope. The `data` object identifies both th
 
 For `refund.failed`, `failure_reason` is a merchant-safe category such as `PAYMENT_NOT_COMPLETED`, `AMOUNT_EXCEEDS_REFUNDABLE`, `REFUND_WINDOW_EXPIRED`, `REVERSAL_NOT_SUPPORTED`, `BANK_REJECTED`, `RAIL_UNAVAILABLE`, `TEMPORARY_PROCESSING_ERROR`, `COMPLIANCE_REVIEW`, or `UNKNOWN`.
 
+## Bank-origin merchant account event
+
+Banks or gateway operators may notify a merchant when the merchant's acquiring account is affected by a bank-side rail event, even when that event did not start as an OpenWave payment session. The event must be normalized into the OpenWave envelope and must not forward raw bank or rail payloads.
+
+```json
+{
+  "id": "evt_01K0A7Q0JR4MVH6DYB6P8HAF3A",
+  "event_id": "evt_01K0A7Q0JR4MVH6DYB6P8HAF3A",
+  "api_version": "1.0.0",
+  "event": "merchant.account.transaction.posted",
+  "timestamp": "2026-06-02T12:00:00Z",
+  "data": {
+    "merchant_id": "mer_123",
+    "environment": "LIVE",
+    "status": "POSTED",
+    "transaction": {
+      "direction": "CREDIT",
+      "amount": 10000,
+      "currency": "LYD",
+      "cbs_reference": "CBS-20260602-00001",
+      "bank_reference": "CBS-20260602-00001",
+      "rail_reference": "LP-88210042",
+      "lypay_reference": "LP-88210042",
+      "rrn": "40602123456",
+      "account_iban": "LY83***************1234",
+      "posted_at": "2026-06-02T12:00:00Z",
+      "description": "LyPay incoming credit"
+    },
+    "counterparty": {
+      "name": "Counterparty name",
+      "account_identifier": "123******789",
+      "bank_name": "Sending Bank",
+      "bank_code": "002"
+    },
+    "source": {
+      "rail": "LYPAY",
+      "bank_handle": "merchant-bank",
+      "origin": "BANK"
+    }
+  }
+}
+```
+
+`merchant.account.transaction.updated` uses the same shape when the first notification was sent before final bank enrichment, for example when the CBS reference is attached after narrative or posting reconciliation.
+
 ## Signature headers
 
 ```http
@@ -115,6 +163,20 @@ X-OpenWave-Signature: sha256=8b55c2...
 4. Deduplicate by event ID.
 5. Persist the event before triggering fulfilment.
 6. Return `2xx` only after durable storage succeeds.
+
+## Delivery log API
+
+Merchants can query delivery history from their backend with the merchant API key. This is the recovery path when an endpoint was down, a message was lost after receipt, or operations need to reconcile webhook state.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/webhooks` | Paginated delivery log with `status`, `event_type`, `page`, `limit`, and optional `include_payload` filters. |
+| `GET` | `/webhooks/{delivery_id}` | Full delivery detail including payload, attempts, last response status, and next retry time. |
+| `GET` | `/webhooks/session/{session_id}` | Deliveries related to one payment session. |
+| `POST` | `/webhooks/{delivery_id}/retry` | Queue a retry for a delivery. |
+| `POST` | `/webhooks/test` | Send a test event to the configured endpoint. |
+
+The delivery log must include failed deliveries and should keep payload access long enough for normal merchant reconciliation windows. Merchants should still process webhooks idempotently by `event_id`; the log is a recovery and audit channel, not a replacement for real-time delivery.
 
 ## Related guides
 
