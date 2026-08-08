@@ -1,10 +1,14 @@
 {
   "name": "openwave-spec",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "private": true,
   "description": "OpenWave API standard for payments, Open Banking, Credit & Finance, NPT identity, webhooks, and gateway interconnect.",
-  "main": "index.js",
   "scripts": {
     "public:check": "bash ./scripts/check-public-surface.sh",
+    "spec:lint": "REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true redocly lint openwave-payments-v1.yaml openwave-presented-payments-v1.yaml openwave-open-banking-v1.0.yaml openwave-credit-finance-v1.yaml openwave-identity-v1.0.yaml openwave-gateway-interconnect-v1.yaml",
+    "spec:contract": "node ./scripts/check-npt-lifecycle-contract.mjs",
+    "test": "npm run public:check && npm run spec:lint && npm run spec:contract",
+    "verify": "npm test && vitepress build docs",
     "docs:dev": "vitepress dev docs",
     "docs:build": "npm run public:check && vitepress build docs",
     "docs:preview": "vitepress preview docs"
@@ -15,12 +19,13 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/neptune-ly/openwave-spec/issues"
   },
   "homepage": "https://neptune-ly.github.io/openwave-spec/",
   "devDependencies": {
+    "@redocly/cli": "2.41.1",
     "vitepress": "^1.6.4"
   },
   "type": "module"

@@ -9,8 +9,8 @@
 **Bank-agnostic · Interoperable · Built for the Libyan Banking Ecosystem**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
-[![Spec](https://img.shields.io/badge/OpenAPI-3.0.3-green.svg)](https://neptune-ly.github.io/openwave-spec/)
-[![Status](https://img.shields.io/badge/Payments%20API-v1.0%20Stable-brightgreen.svg)]()
+[![Spec](https://img.shields.io/badge/OpenAPI-3.x-green.svg)](https://neptune-ly.github.io/openwave-spec/)
+[![Status](https://img.shields.io/badge/Payments%20API-v1.1.0%20Stable-brightgreen.svg)]()
 [![Status](https://img.shields.io/badge/Open%20Banking%20API-v1.0%20Stable-brightgreen.svg)]()
 
 *Developed by [Neptune. Fintech](https://www.neptune.ly)*
@@ -39,15 +39,15 @@ OpenWave is **bank-agnostic and gateway-agnostic by design**. Any institution or
 
 | Module | Version | Status | Description |
 |:---|:---:|:---:|:---|
-| **Payments** | 1.0.0 | ✅ Stable | Online payment sessions via IBAN or NPT alias |
+| **Payments** | 1.1.0 | ✅ Stable | Online payment sessions and NPT alias lifecycle via IBAN or handle |
 | **Presented Payments** | 1.0.0 | Draft | QR and NFC presentment for one-time payments and mandate approval |
 | **Recurring Payments** | 1.0.0 | ✅ Stable | Mandate-based recurring charges |
-| **Alias (NPT — National Payment Tag)** | 1.0.0 | ✅ Stable | Universal payment identity enrollment & resolution |
+| **Alias (NPT — National Payment Tag)** | 1.1.0 | ✅ Stable | Enrollment, availability, safe rename, and resolution |
 | **Webhooks** | 1.0.0 | ✅ Stable | Real-time event notifications with HMAC signature |
 | **Open Banking — AISP** | 1.0.0 | ✅ Stable | Account info, balances, transactions |
 | **Open Banking — PISP** | 1.0.0 | ✅ Stable | TPP-initiated payment orders |
 | **Credit & Finance** | 1.0.0 | Draft | Credit assessments, BNPL, revolving credit, Murabaha, repayments |
-| **Identity Registry** | 1.0.0 | ✅ Stable | Global NPT handle ownership, multi-bank accounts, alias resolution |
+| **Identity Registry** | 1.1.0 | ✅ Stable | Global NPT ownership, multi-bank accounts, linked-bank login approval, rename, retirement, and resolution |
 | **Gateway Interconnect** | 1.0.0 | Draft | Gateway discovery, remote routing, and gateway-to-gateway settlement |
 
 ---
@@ -58,11 +58,11 @@ The specification files are valid OpenAPI documents — load them directly into 
 
 | File | Covers |
 |:---|:---|
-| [`openwave-payments-v1.yaml`](./openwave-payments-v1.yaml) | Payments · Recurring · Alias · Webhooks |
+| [`openwave-payments-v1.yaml`](./openwave-payments-v1.yaml) | Payments · Recurring · Alias lifecycle · Webhooks |
 | [`openwave-presented-payments-v1.yaml`](./openwave-presented-payments-v1.yaml) | Merchant-presented QR · NFC handoff · app handoff · capability discovery |
 | [`openwave-open-banking-v1.0.yaml`](./openwave-open-banking-v1.0.yaml) | Open Banking AISP + PISP · OAuth 2.0 + PKCE |
 | [`openwave-credit-finance-v1.yaml`](./openwave-credit-finance-v1.yaml) | Credit assessment · BNPL · Revolving credit · Murabaha · repayment schedules |
-| [`openwave-identity-v1.0.yaml`](./openwave-identity-v1.0.yaml) | Identity Registry · NPT handle ownership · Multi-bank aliases · Governance |
+| [`openwave-identity-v1.0.yaml`](./openwave-identity-v1.0.yaml) | Identity Registry · NPT ownership · Availability · Safe rename · Permanent retirement |
 | [`openwave-gateway-interconnect-v1.yaml`](./openwave-gateway-interconnect-v1.yaml) | Gateway discovery · Remote alias resolution · Cross-gateway routing · Settlement |
 
 ---
@@ -85,6 +85,7 @@ Inspired by the email model — `@bank-handle` is the routing suffix, the same w
 - One username, many banks — add any bank account you hold to your identity
 - You control your default — change which account receives payments with no `@` suffix
 - First-come, first-served — handles are globally unique, claimed through your bank's KYC
+- Never reissued — a previous username is permanently retired after rename and never redirects to the replacement
 - The Identity Registry stores only routing data — no balances, no transaction history
 
 ### OpenWave Gateway
@@ -330,7 +331,7 @@ OpenWave follows **Semantic Versioning**:
 | New endpoint or optional field | `MINOR` | 1.0 → 1.1 |
 | Clarification, fix, or example update | `PATCH` | 1.0.0 → 1.0.1 |
 
-The `api_version` field in webhook envelopes and the `info.version` in each spec file always reflect the module version.
+The OpenAPI `info.version` identifies the module release. Webhook `api_version` identifies the event-envelope contract and can evolve independently; the current envelope remains `1.0.0`.
 
 ---
 

@@ -1,6 +1,6 @@
 # Spec Files
 
-Six OpenAPI 3.0.3 files define the complete OpenWave standard. All are machine-readable and compatible with any OpenAPI tooling.
+Six OpenAPI 3.x files define the complete OpenWave standard. All are machine-readable and compatible with current OpenAPI tooling.
 
 ## openwave-payments-v1.yaml
 
@@ -40,7 +40,7 @@ curl https://raw.githubusercontent.com/neptune-ly/openwave-spec/main/openwave-pa
 
 ## openwave-identity-v1.0.yaml
 
-**Covers:** NPT handle ownership, multi-bank account linking, public alias resolution, bank phonebook, governance endpoints
+**Covers:** NPT handle ownership, typed availability, safe rename, permanent retirement, multi-bank account linking, linked-bank login approval, public alias resolution, bank phonebook, governance endpoints
 
 → [View on GitHub](https://github.com/neptune-ly/openwave-spec/blob/main/openwave-identity-v1.0.yaml)<br>
 → [Raw YAML](https://raw.githubusercontent.com/neptune-ly/openwave-spec/main/openwave-identity-v1.0.yaml)
@@ -101,6 +101,6 @@ OpenWave follows **Semantic Versioning**:
 | New endpoint or optional field | `MINOR` (1.0 → 1.1) |
 | Clarification, fix, example update | `PATCH` (1.0.0 → 1.0.1) |
 
-The `api_version` field in webhook envelopes and the `info.version` in each spec always reflect the module version.
+The OpenAPI `info.version` identifies each module release. Webhook `api_version` identifies the event-envelope contract and can evolve independently; the current envelope remains `1.0.0`.
 
 All changes are documented in [CHANGELOG.md](https://github.com/neptune-ly/openwave-spec/blob/main/CHANGELOG.md).

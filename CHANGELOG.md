@@ -9,6 +9,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — NPT handle lifecycle
+- Identity 1.1.0 adds typed handle availability and bank-authenticated rename operations.
+- Payments 1.1.0 adds the Astro-compatible alias availability and rename gateway surface.
+- Previous handles are retired permanently after rename, never reissued, never redirected, and never disclosed through a successor lookup.
+- Availability distinguishes `AVAILABLE`, `TAKEN`, `RETIRED`, and `INVALID`; gateway integrations preserve `UNKNOWN` when Identity cannot be asked.
+- Deterministic OpenAPI linting and an executable NPT lifecycle contract check now gate documentation builds.
+- The Identity rename contract now records the shipped camelCase request/response DTO, forced portal reauthentication, and fresh delegated-app consent after a changed handle.
+- The bank-app login approval contract now covers multi-bank selection, bank-scoped queue reads, exact terminal errors, and the rule that Identity never collects bank credentials.
+
 ### Added — Credit & Finance API
 - New `openwave-credit-finance-v1.yaml` draft module for credit assessment, affordability summaries, BNPL installment offers, revolving-credit drawdowns, Murabaha installment disclosures, finance contracts, repayment schedules, and finance lifecycle webhooks.
 - New Open Banking scopes for finance use cases: `credit_assessment:read`, `income:read`, `liabilities:read`, and `affordability:read`.
@@ -27,6 +36,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ---
 
 ## Identity Registry API
+
+### [1.1.0] — 2026-08-07
+
+- Added `GET /identity/handles/{handle}/availability` with `AVAILABLE`, `TAKEN`, `RETIRED`, and `INVALID` verdicts.
+- Added `PATCH /identity/{npt_handle}/handle` with linked-bank and national-ID authorization, a 30-day cooldown, and a lifetime cap of three successful renames.
+- Added `HANDLE_RETIRED`, `HANDLE_RENAME_NOT_PERMITTED`, and `HANDLE_RENAME_TOO_SOON` errors.
+- A renamed handle is permanently reserved and resolves as `410 HANDLE_RETIRED` without redirecting to or revealing the replacement.
+- Identity deactivation is clarified as non-releasing: the name remains reserved after resolution stops.
 
 ### [1.0.0] — 2026-04-24
 
@@ -52,6 +69,12 @@ Initial stable release of the OpenWave Identity Registry API.
 ---
 
 ## Payments API
+
+### [1.1.0] — 2026-08-07
+
+- Added `GET /alias/{alias_username}/availability`, including the safe `UNKNOWN` dependency state.
+- Added `PATCH /alias/rename` with exact `400`, `403`, `404`, `409`, `410`, `429`, `502`, and `503` outcomes.
+- Successful responses confirm `previous_retired: true`; dependency failures confirm that no rename was made.
 
 ### [1.0.0] — 2026-04-23
 
@@ -109,10 +132,11 @@ Stable release of the OpenWave Open Banking API. Supersedes draft v0.9.0.
 |---|---|---|
 | ~~Open Banking v1.0 stable~~ | ~~OB 1.0.0~~ | ✅ Done |
 | ~~Identity Registry v1.0 stable~~ | ~~Identity 1.0.0~~ | ✅ Done |
+| ~~NPT availability, safe rename, and permanent retirement~~ | ~~Identity / Payments 1.1.0~~ | ✅ Done |
 | GOVERNANCE.md — dispute resolution & stewardship charter | Identity 1.0.1 | Governance document |
 | Standing Orders (PISP) | OB 1.1.0 | Scheduled recurring payments |
 | Variable Recurring Payments | OB 1.2.0 | Mandate-based PISP (`mandates:write` scope) |
-| Cross-gateway identity federation | Identity 1.1.0 | Gateway-to-gateway handle discovery without central registry |
+| Cross-gateway identity federation | Identity 1.2.0 | Gateway-to-gateway handle discovery without central registry |
 | Refund API | Payments 1.1.0 | Merchant-initiated refunds |
 | Settlement reporting API | Payments 1.1.0 | Detailed settlement breakdowns |
-| Handle transfer / dispute API | Identity 1.1.0 | Formal bank-mediated dispute mechanism |
+| Handle transfer / dispute API | Identity 1.2.0 | Formal bank-mediated dispute mechanism |

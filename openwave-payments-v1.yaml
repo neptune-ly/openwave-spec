@@ -3,7 +3,7 @@ openapi: 3.0.3
 info:
   title: OpenWave — Payments & Recurring API
   description: |
-    # OpenWave Payments API v1.0
+    # OpenWave Payments API v1.1
 
     This file covers the **Payments**, **Recurring Mandates**, **Alias**, and **Webhooks**
     modules of the OpenWave standard.
@@ -42,7 +42,7 @@ info:
     All write endpoints accept `Idempotency-Key` header. Same key within 24 h returns
     the original response without re-processing.
 
-  version: "1.0.0"
+  version: "1.1.0"
   contact:
     name: OpenWave Standard
     url: https://github.com/neptune-ly/openwave-spec
@@ -723,6 +723,156 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /alias/{alias_username}/availability:
+    get:
+      tags: [Alias]
+      summary: Check whether an NPT alias username can be used
+      description: |
+        Returns the Identity Registry's typed availability verdict before an
+        enrollment or rename. `RETIRED` is permanent, while `UNKNOWN` means the
+        registry was disabled or could not be asked. Clients must never treat
+        `UNKNOWN` or a transport failure as an available name.
+      operationId: getAliasAvailability
+      security:
+        - BankPartnerKey: []
+      parameters:
+        - name: alias_username
+          in: path
+          required: true
+          schema:
+            type: string
+            example: ahmed.ali
+          description: Candidate username without an `@bank-handle` suffix.
+      responses:
+        '200':
+          description: Availability verdict, including a safe `UNKNOWN` degraded state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasAvailabilityResponse'
+              examples:
+                available:
+                  value:
+                    alias_username: ahmed.ali
+                    status: AVAILABLE
+                    available: true
+                retired:
+                  value:
+                    alias_username: old.handle
+                    status: RETIRED
+                    available: false
+                unknown:
+                  value:
+                    alias_username: ahmed.ali
+                    status: UNKNOWN
+                    available: false
+
+  /alias/rename:
+    patch:
+      tags: [Alias]
+      summary: Rename a customer's NPT alias username
+      description: |
+        Requests an authoritative rename from the OpenWave Identity Registry.
+        On success the old username is permanently retired: it is never reissued,
+        never redirects, and never reveals the replacement.
+
+        The gateway preserves distinct refusal states because each requires a
+        different recovery action. A dependency failure returns `502` or `503`
+        and confirms that the name was not changed; it is not an availability verdict.
+      operationId: renameAlias
+      security:
+        - BankPartnerKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameAliasRequest'
+            example:
+              current_alias_username: ahmed
+              new_alias_username: ahmed.ali
+              national_id: "123456789012"
+      responses:
+        '200':
+          description: Alias renamed and previous username retired permanently
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasRenameResponse'
+        '400':
+          description: The requested alias or national ID format is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasInvalidErrorResponse'
+              example:
+                code: ALIAS_INVALID
+                message: That name is not a valid alias.
+        '403':
+          description: Calling bank is not permitted to rename this customer or national ID does not match
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasRenameNotPermittedErrorResponse'
+              example:
+                code: ALIAS_RENAME_NOT_PERMITTED
+                message: This alias cannot be renamed by this bank, or the national ID does not match.
+        '404':
+          description: Current alias does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasNotFoundErrorResponse'
+              example:
+                code: ALIAS_NOT_FOUND
+                message: No such alias.
+        '409':
+          description: Requested alias is owned by a current identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasTakenErrorResponse'
+              example:
+                code: ALIAS_TAKEN
+                message: That name is already in use.
+        '410':
+          description: Requested alias was retired permanently and cannot be reused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasRetiredErrorResponse'
+              example:
+                code: ALIAS_RETIRED
+                message: That name belonged to someone else and cannot be reused.
+        '429':
+          description: Rename cooldown or lifetime limit was reached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasRenameTooSoonErrorResponse'
+              example:
+                code: ALIAS_RENAME_TOO_SOON
+                message: This name was changed recently. Try again later.
+        '502':
+          description: Identity Registry could not be reached; no rename was made
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AliasDependencyErrorResponse'
+              example:
+                code: IDENTITY_UNAVAILABLE
+                message: OpenWave Identity could not be reached. Your name has not been changed.
+                verdict: UNAVAILABLE
+        '503':
+          description: OpenWave Identity is disabled for this deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityDisabledErrorResponse'
+              example:
+                code: IDENTITY_DISABLED
+                message: OpenWave Identity is not enabled for this deployment
 
   /alias/{alias}:
     get:
@@ -2366,6 +2516,138 @@ components:
 
     # --- Alias ---
 
+    AliasAvailabilityStatus:
+      type: string
+      description: |
+        `UNKNOWN` is a degraded dependency state, not permission to claim the name.
+      enum: [AVAILABLE, TAKEN, RETIRED, INVALID, UNKNOWN]
+
+    AliasAvailabilityResponse:
+      type: object
+      required: [alias_username, status, available]
+      properties:
+        alias_username:
+          type: string
+          example: ahmed.ali
+        status:
+          $ref: '#/components/schemas/AliasAvailabilityStatus'
+        available:
+          type: boolean
+          description: True only for `AVAILABLE`; false for `TAKEN`, `RETIRED`, `INVALID`, and degraded `UNKNOWN` states.
+
+    RenameAliasRequest:
+      type: object
+      required: [current_alias_username, new_alias_username, national_id]
+      properties:
+        current_alias_username:
+          type: string
+          description: Current global username without an `@bank-handle` suffix.
+          example: ahmed
+        new_alias_username:
+          type: string
+          pattern: '^[a-z0-9_.-]{3,32}$'
+          description: New lowercase global username; 3-32 letters, numbers, dots, underscores, or hyphens.
+          example: ahmed.ali
+        national_id:
+          type: string
+          pattern: '^[0-9]{12}$'
+          description: National ID used by the registry to verify the rename authority.
+          example: "123456789012"
+
+    AliasRenameResponse:
+      type: object
+      required: [alias_username, previous_alias_username, previous_retired, message]
+      properties:
+        alias_username:
+          type: string
+          example: ahmed.ali
+        previous_alias_username:
+          type: string
+          example: ahmed
+        previous_retired:
+          type: boolean
+          enum: [true]
+          description: Confirms the previous username is permanently reserved and will not redirect.
+        message:
+          type: string
+          example: Alias renamed. The previous name is permanently retired.
+
+    AliasDependencyErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          required: [verdict]
+          properties:
+            code:
+              type: string
+              enum: [IDENTITY_UNAVAILABLE]
+            verdict:
+              type: string
+              enum: [UNAVAILABLE, DISABLED]
+
+    AliasInvalidErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [ALIAS_INVALID]
+
+    AliasRenameNotPermittedErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [ALIAS_RENAME_NOT_PERMITTED]
+
+    AliasNotFoundErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [ALIAS_NOT_FOUND]
+
+    AliasTakenErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [ALIAS_TAKEN]
+
+    AliasRetiredErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [ALIAS_RETIRED]
+
+    AliasRenameTooSoonErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [ALIAS_RENAME_TOO_SOON]
+
+    IdentityDisabledErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [IDENTITY_DISABLED]
+
     EnrollAliasRequest:
       type: object
       required:
@@ -2525,6 +2807,7 @@ components:
 
     ErrorResponse:
       type: object
+      required: [code, message]
       properties:
         code:
           type: string

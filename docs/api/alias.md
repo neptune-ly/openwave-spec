@@ -17,7 +17,8 @@ The Alias API covers NPT resolution and account selection for payments. Ownershi
 | Reserve or create `username@bank` | Identity Registry | Customer owns the username; banks can only claim accounts they vouch for. |
 | Add an account under a bank handle | Identity Registry through bank-authenticated API | Requires `X-OpenWave-Bank-Key: owbk_...`. |
 | Resolve alias for checkout | Gateway | Gateway calls the registry and returns only the fields required to continue authorization. |
-| Change global username | Customer / registry policy | Banks must not rename a global alias without customer authority. |
+| Check username availability | Identity Registry through the gateway | `UNKNOWN` is a dependency state, never permission to claim. |
+| Change global username | Customer through a linked bank | Requires matching national ID; the old name retires permanently. |
 | Change default account for one bank | Customer or approved bank flow | The account must still belong to that bank. |
 
 ## Payment-time alias resolution
@@ -27,7 +28,21 @@ The Alias API covers NPT resolution and account selection for payments. Ownershi
 | `POST /session/{id}/resolve-payer` | Resolve an alias or IBAN inside the checkout session. |
 | `GET /alias/{alias}` | Resolve alias metadata when exposed by a gateway. |
 | `POST /alias/enroll` | Gateway-assisted enrollment backed by the OpenWave Identity Registry. |
-| `POST /alias/{alias}/default-account` | Set default account for an alias within permitted ownership rules. |
+| `GET /alias/{alias_username}/availability` | Preserve the registry's typed availability verdict. |
+| `PATCH /alias/rename` | Rename through the registry and retire the previous username. |
+| `PATCH /alias/{alias}/default-account` | Set default account for an alias within permitted ownership rules. |
+
+## Availability and rename states
+
+| Result | HTTP / status | Meaning |
+|---|---|---|
+| Free | `200 AVAILABLE` | The name can be claimed now. |
+| Current owner | `200 TAKEN` for availability; `409 ALIAS_TAKEN` for rename | Choose another name. |
+| Permanent tombstone | `200 RETIRED` for availability; `410 ALIAS_RETIRED` for rename | The name will never become reusable. |
+| Invalid format | `200 INVALID` for availability; `400 ALIAS_INVALID` for rename | Correct the candidate. |
+| Registry unknown | `200 UNKNOWN`, `502 IDENTITY_UNAVAILABLE`, or `503 IDENTITY_DISABLED` | Retry; no rename was made and the name is not known to be free. |
+
+A successful rename returns `previous_retired: true`. The previous name cannot be claimed, cannot be used as a later rename target, and resolves as retired. Neither Identity nor the gateway redirects the old name or reveals the replacement.
 
 ## Example responses
 
@@ -55,12 +70,8 @@ The Alias API covers NPT resolution and account selection for payments. Ownershi
 
 ```json
 {
-  "error": {
-    "code": "ALIAS_NOT_FOUND",
-    "message": "Alias was not found in the identity registry.",
-    "retryable": false,
-    "correlation_id": "corr_01HX7V7XT5Y7C7G5WM3H8S5W5P"
-  }
+  "code": "ALIAS_NOT_FOUND",
+  "message": "No such alias."
 }
 ```
 
@@ -70,6 +81,7 @@ The Alias API covers NPT resolution and account selection for payments. Ownershi
 - Never expose full account details to a merchant unless the customer explicitly consented under an Open Banking scope.
 - If an alias is not found, return `ALIAS_NOT_FOUND` without leaking whether a phone number, customer ID, or private registry record exists.
 - If the registry is unavailable, return a retry-safe dependency error rather than falling back to stale local ownership claims.
+- Never collapse `TAKEN`, `RETIRED`, `INVALID`, and `UNKNOWN`; each requires a different customer action.
 
 ## Related guides
 

@@ -29,6 +29,63 @@
   --ow-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ow-motion-quick: 180ms;
   --ow-motion-page: 520ms;
+
+  /* Odyssey 2.21.1 bridge: semantic tokens used by the documentation shell. */
+  --md-sys-color-primary: oklch(0.48 0.15 258);
+  --md-sys-color-on-primary: oklch(0.99 0.02 258);
+  --md-sys-color-tertiary: oklch(0.545 0.1 200);
+  --md-sys-color-error: oklch(0.52 0.2 27);
+  --md-sys-color-surface: oklch(0.985 0.006 258);
+  --md-sys-color-on-surface: oklch(0.16 0.02 258);
+  --md-sys-color-surface-container-low: oklch(0.965 0.006 258);
+  --md-sys-color-outline-variant: oklch(0.86 0.015 258);
+  --md-sys-color-scrim: oklch(0.08 0.02 258);
+
+  --npt-font-text: "Hanken Grotesk";
+  --npt-font-text-ar: "IBM Plex Sans Arabic";
+  --npt-font-text-stack: var(--npt-font-text), "SF Compact Rounded", "SF Pro Rounded", "Beiruti", var(--vp-font-family-base);
+  --npt-font-text-ar-stack: var(--npt-font-text-ar), "Beiruti", var(--vp-font-family-base);
+  --npt-space-0: 0;
+  --npt-space-1: 4px;
+  --npt-space-2: 8px;
+  --npt-space-3: 12px;
+  --npt-space-4: 16px;
+  --npt-space-6: 24px;
+  --npt-space-8: 32px;
+  --npt-corner-xs: 8px;
+  --npt-corner-sm: 12px;
+  --npt-corner-md: 16px;
+  --npt-corner-lg: 24px;
+  --npt-corner-full: 999px;
+  --npt-dur-1: 100ms;
+  --npt-dur-2: 180ms;
+  --npt-dur-3: 280ms;
+  --npt-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --npt-ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --npt-elev-1: 0 1px 2px -1px color-mix(in oklab, var(--md-sys-color-scrim) 16%, transparent);
+  --npt-elev-2: 0 2px 6px -2px color-mix(in oklab, var(--md-sys-color-scrim) 20%, transparent);
+  --npt-elev-3: 0 8px 20px -10px color-mix(in oklab, var(--md-sys-color-scrim) 28%, transparent);
+  --npt-focus-ring: 3px solid var(--md-sys-color-primary);
+  --npt-focus-ring-offset: 2px;
+  --npt-touch-min: 48px;
+  --npt-state-hover-surface: color-mix(in oklab, var(--md-sys-color-primary) 8%, transparent);
+  --npt-state-pressed-surface: color-mix(in oklab, var(--md-sys-color-primary) 12%, transparent);
+  --npt-state-hover-layer: linear-gradient(var(--npt-state-hover-surface), var(--npt-state-hover-surface));
+  --npt-state-pressed-layer: linear-gradient(var(--npt-state-pressed-surface), var(--npt-state-pressed-surface));
+  --npt-card-transition: transform var(--npt-dur-2) var(--npt-ease-standard), box-shadow var(--npt-dur-2) var(--npt-ease-standard), border-color var(--npt-dur-2) var(--npt-ease-standard);
+  --npt-control-transition: transform var(--npt-dur-1) var(--npt-ease-standard), background-color var(--npt-dur-2) var(--npt-ease-standard), border-color var(--npt-dur-2) var(--npt-ease-standard);
+  --npt-press-transform: scale(0.98);
+  --npt-motion-reduced-duration: 0.01ms;
+  --npt-motion-reduced-iterations: 1;
+  --npt-animation-none: none;
+  --npt-scroll-behavior-reduced: auto;
+  --npt-opacity-hidden: 0;
+  --npt-text-align-start: start;
+  --npt-doc-border: 2px solid var(--md-sys-color-outline-variant);
+  --npt-border-none: none;
+  --npt-color-scheme: light;
+
+  color-scheme: var(--npt-color-scheme);
 }
 
 .dark {
@@ -36,10 +93,24 @@
   --vp-c-brand-2: #EB4E4D;
   --vp-c-brand-3: #00A8AE;
   --vp-c-brand-soft: rgba(59, 193, 238, 0.14);
+  --md-sys-color-primary: oklch(0.8 0.12 258);
+  --md-sys-color-on-primary: oklch(0.2 0.1 258);
+  --md-sys-color-tertiary: oklch(0.82 0.08 200);
+  --md-sys-color-error: oklch(0.78 0.13 27);
+  --md-sys-color-surface: oklch(0.13 0.012 258);
+  --md-sys-color-on-surface: oklch(0.92 0.01 258);
+  --md-sys-color-surface-container-low: oklch(0.16 0.014 258);
+  --md-sys-color-outline-variant: oklch(0.32 0.02 258);
+  --md-sys-color-scrim: oklch(0 0 0);
+  --npt-elev-tint: color-mix(in oklab, var(--md-sys-color-scrim) 65%, var(--md-sys-color-primary) 35%);
+  --npt-elev-1: 0 0.5px 6px color-mix(in oklab, var(--npt-elev-tint) 16%, transparent);
+  --npt-elev-2: 0 1px 12px color-mix(in oklab, var(--npt-elev-tint) 20%, transparent);
+  --npt-elev-3: 0 3px 32px color-mix(in oklab, var(--npt-elev-tint) 26%, transparent);
+  --npt-color-scheme: dark;
 }
 
 body {
-  font-family: "SF Compact Rounded", "SF Pro Rounded", "Beiruti", var(--vp-font-family-base);
+  font-family: var(--npt-font-text-stack);
 }
 
 .VPHome {
@@ -1122,6 +1193,15 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: var(--npt-scroll-behavior-reduced) !important;
+    animation-duration: var(--npt-motion-reduced-duration) !important;
+    animation-iteration-count: var(--npt-motion-reduced-iterations) !important;
+    transition-duration: var(--npt-motion-reduced-duration) !important;
+  }
+
   .ow-flow,
   .ow-packet,
   .VPHomeHero .name,
@@ -1135,10 +1215,10 @@ body {
   .ow-lane::after,
   .ow-switch-line span,
   .ow-data-line i {
-    animation: none !important;
+    animation: var(--npt-animation-none) !important;
   }
   .ow-packet {
-    opacity: 0;
+    opacity: var(--npt-opacity-hidden);
   }
 }
 
@@ -1162,4 +1242,55 @@ body {
 .vp-doc table th {
   background: var(--vp-c-bg-soft);
   font-weight: 600;
+}
+
+/* ── Odyssey 2.21.1 state, focus, and bidirectional behavior ──────────────── */
+:where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: var(--npt-focus-ring);
+  outline-offset: var(--npt-focus-ring-offset);
+}
+
+:where(.VPButton, .ow-dl-btn, .ow-dl-btn-ghost, .VPNavScreenMenuLink, .VPSocialLink) {
+  min-block-size: var(--npt-touch-min);
+  transition: var(--npt-control-transition);
+}
+
+:where(.VPSocialLink) {
+  min-inline-size: var(--npt-touch-min);
+}
+
+:where(.VPButton, .ow-dl-btn, .ow-dl-btn-ghost):hover {
+  background-image: var(--npt-state-hover-layer);
+}
+
+:where(.VPButton, .ow-dl-btn, .ow-dl-btn-ghost):active {
+  transform: var(--npt-press-transform);
+  background-image: var(--npt-state-pressed-layer);
+}
+
+:where(.VPFeature, .ow-module-card, .ow-download-card, .ow-flow-card, .ow-path-grid a) {
+  box-shadow: var(--npt-elev-1);
+  transition: var(--npt-card-transition);
+}
+
+:where(.VPFeature, .ow-module-card, .ow-download-card, .ow-flow-card, .ow-path-grid a):is(:hover, :focus-within) {
+  box-shadow: var(--npt-elev-3);
+}
+
+:root[dir='rtl'] body {
+  font-family: var(--npt-font-text-ar-stack);
+}
+
+:root[dir='rtl'] .vp-doc {
+  text-align: var(--npt-text-align-start);
+}
+
+:root[dir='rtl'] .vp-doc :where(ul, ol) {
+  padding-inline: var(--npt-space-6) var(--npt-space-0);
+}
+
+:root[dir='rtl'] .vp-doc blockquote {
+  border-inline-start: var(--npt-doc-border);
+  border-inline-end: var(--npt-border-none);
+  padding-inline: var(--npt-space-4) var(--npt-space-0);
 }

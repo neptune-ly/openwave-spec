@@ -15,7 +15,7 @@ Open a GitHub issue for:
 1. Fork the repo
 2. Create a branch: `git checkout -b proposal/your-change`
 3. Edit the relevant YAML file(s)
-4. Validate your YAML: `npx @redocly/cli lint openwave-payments-v1.yaml`
+4. Install dependencies with `npm ci`, then run the complete validation suite with `npm run verify`
 5. Open a Pull Request with a clear description of the change and rationale
 
 ### Change Categories
@@ -30,12 +30,11 @@ Open a GitHub issue for:
 ### Validation
 
 ```bash
-# Install Redocly CLI
-npm install -g @redocly/cli
+# Validate every OpenAPI file and the NPT lifecycle contract
+npm test
 
-# Lint both specs
-npx @redocly/cli lint openwave-payments-v1.yaml
-npx @redocly/cli lint openwave-open-banking-v0.9.yaml
+# Validate public docs and build the VitePress site
+npm run verify
 ```
 
 ## Design Principles
@@ -43,7 +42,7 @@ npx @redocly/cli lint openwave-open-banking-v0.9.yaml
 1. **Bank-agnostic** — no assumptions about specific CBS or bank technology
 2. **Minimal** — only include what is necessary; avoid over-specifying implementation details
 3. **Practical** — designed for real-world deployment in emerging markets, not theoretical perfection
-4. **Secure by default** — authentication and consent are non-negotiable; never add unauthenticated endpoints
+4. **Secure by default** — authenticate non-public endpoints; mark intentional public operations explicitly with `security: []`
 5. **Versioned** — never make breaking changes without a MAJOR version bump
 6. **Consistent** — amounts always minor units, IDs always UUIDs, dates always ISO 8601
 

@@ -23,7 +23,7 @@ A person **owns** a username and can **link accounts from multiple banks** to it
 | **Portable** | Change your default without sharing a new IBAN |
 | **Bank-vouched** | Claimed through your bank's existing KYC process |
 | **Routing-only** | The registry stores only routing data — no balances, no history |
-| **First-come, first-served** | A handle is yours once claimed, until voluntarily released |
+| **First-come, permanently reserved** | A claimed handle is never reissued; previous names retire permanently after rename |
 
 ## How Claiming Works
 
@@ -52,7 +52,7 @@ A person **owns** a username and can **link accounts from multiple banks** to it
       <span class="ow-account-active">tellesy@andalus <b>default</b></span>
       <span>tellesy@nub <b>linked</b></span>
     </div>
-    <div class="ow-boundary-note">Banks can update only the accounts they vouched for. They cannot rename the global handle.</div>
+    <div class="ow-boundary-note">Banks can update only accounts they vouched for. A rename requires a linked bank, matching national ID, and customer authority.</div>
   </div>
 </section>
 
@@ -81,18 +81,56 @@ mtellesy@wahda     →  wahda
 
 Merchants or senders don't need to know which bank you use. They just use `mtellesy`.
 
+## Availability, Rename, and Permanent Retirement
+
+Before enrollment or rename, a bank asks the registry for a typed verdict:
+
+| Status | Meaning | Customer action |
+|:---|:---|:---|
+| `AVAILABLE` | The normalized handle can be claimed now. | Continue. |
+| `TAKEN` | A current or retained identity owns it. | Choose another handle. |
+| `RETIRED` | The handle was used before and is reserved forever. | Choose another handle; waiting will not help. |
+| `INVALID` | The candidate does not match the format. | Correct the spelling or format. |
+| `UNKNOWN` | A gateway could not reach the registry or Identity is disabled. | Retry safely; never assume the name is free. |
+
+A customer may rename through a bank that already holds one of their linked accounts. The bank supplies the matching 12-digit national ID, and the registry moves the identity atomically. Successful changes have a 30-day cooldown and a lifetime cap of three. Retrying the same normalized name is a no-op and consumes no allowance.
+
+The previous handle is then **retired permanently**. It cannot be claimed or used as another rename target. Resolution returns `410 HANDLE_RETIRED`; it never redirects to or reveals the replacement. This prevents saved payees, printed QR codes, or old messages from silently paying a future owner.
+
+The rename also changes the Identity portal username. Existing portal sessions for
+the old subject are rejected and OAuth tokens and grants for that subject are
+revoked atomically. The customer signs in again with the new handle and grants
+fresh consent to each delegated app. A same-name retry changes no subject and does
+not require this cycle.
+
+## Multi-bank sign-in selection
+
+A customer who enters a phone number or national ID signs in first with their
+OpenWave Identity portal password. If portal TOTP is enabled, TOTP is verified
+first and the flow still advances to bank approval. Identity then returns the
+linked bank choices; it does **not** ask for any bank password, bank PIN, bank
+OTP, passcode, or push secret.
+
+The customer selects one bank app. The default bank may be listed first, but it is
+not mandatory when another linked bank is available. The selected bank authenticates
+its own customer on its trusted surface and approves or rejects the five-minute
+challenge with its internal `customerRef`. The portal retains the opaque status
+token and polls for `PENDING`, `APPROVED`, `REJECTED`, or `EXPIRED`; the token is
+never a bank credential and is not handed to the bank app.
+
+Deactivating an identity also does not release its name. The identity stops resolving, while the handle remains reserved for safety and governance.
+
 ## Format Rules
 
 | Rule | Example |
 |:---|:---|
-| 3–30 characters | ✅ `mtellesy`, ✅ `ahmed` |
-| Lowercase letters, numbers, underscores, hyphens | ✅ `ahmed_123`, ✅ `my-store` |
-| Must start with a letter or number | ✅ `ahmed`, ❌ `_ahmed` |
+| 3–32 characters | ✅ `mtellesy`, ✅ `ahmed` |
+| Lowercase letters, numbers, dots, underscores, hyphens | ✅ `ahmed.ali`, ✅ `ahmed_123`, ✅ `my-store` |
 | No spaces | ❌ `ahmed ali` |
 
 ## Bank Handle Format
 
-Bank handles follow the same rules and are issued when a bank registers with the gateway.
+Bank handles are separate registry identifiers: 2–20 lowercase letters, numbers, or hyphens. They are issued when a bank registers with the registry.
 
 ```
 @andalus    →  Andalus Bank
