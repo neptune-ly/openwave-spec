@@ -1,0 +1,8 @@
+# Spring gives literal routes precedence over `{npt_handle}`. These three
+# pointers document that intentional runtime shape without suppressing the rule
+# for any other path or specification.
+openwave-identity-v1.0.yaml:
+  no-ambiguous-paths:
+    - '#/paths/~1identity~1login-approvals~1{challenge_id}'
+    - '#/paths/~1identity~1{npt_handle}~1accounts'
+    - '#/paths/~1identity~1{npt_handle}~1default'

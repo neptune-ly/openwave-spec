@@ -3,7 +3,7 @@ openapi: 3.0.3
 info:
   title: OpenWave — Identity & Alias Registry API
   description: |
-    # OpenWave Identity API v1.0
+    # OpenWave Identity API v1.1
 
     The OpenWave Identity Registry is the global, open-source identity layer for the
     OpenWave payment network. It is currently operated by **Neptune Fintech** under a
@@ -44,6 +44,8 @@ info:
       no authentication and is designed to be cached by gateways.
     - **First-come, first-served** — handles are unique globally. Disputes are
       resolved through the registered bank.
+    - **Names are never reissued** — when a customer renames, the previous handle
+      is permanently retired. It never redirects to, or reveals, the replacement.
 
     ---
 
@@ -99,7 +101,7 @@ info:
     - Handle disputes follow a documented arbitration process
     - Stewardship transfer to CBL or bank consortium is a stated goal
 
-  version: "1.0.0"
+  version: "1.1.0"
   contact:
     name: Neptune Fintech — OpenWave Registry
     url: https://www.neptune.ly
@@ -109,7 +111,7 @@ info:
 
 externalDocs:
   description: OpenWave Standard Repository
-  url: https://github.com/Tellesy/openwave-spec
+  url: https://github.com/neptune-ly/openwave-spec
 
 servers:
   - url: https://registry.openwave.ly/v1
@@ -126,10 +128,14 @@ tags:
     description: Alias resolution — public, used by gateways and payment apps
   - name: Identity
     description: Identity profile management
+  - name: Authentication
+    description: Customer portal sign-in and linked-bank approval
   - name: Accounts
     description: Link and manage bank accounts under an identity
   - name: Banks
     description: Bank handle registry — maps bank-handle to core endpoint
+  - name: KYC
+    description: Bank-authenticated cross-bank identity deduplication
   - name: Registry
     description: Registry metadata and governance info
 
@@ -161,6 +167,7 @@ paths:
         **Cache guidance:** responses may be cached for up to 60 seconds. Gateways
         should re-resolve on cache miss or payment failure.
       operationId: resolveAlias
+      security: []
       parameters:
         - name: alias
           in: query
@@ -188,7 +195,7 @@ paths:
             X-OpenWave-Registry-Version:
               schema:
                 type: string
-                example: "1.0.0"
+                example: "1.1.0"
           content:
             application/json:
               schema:
@@ -210,6 +217,15 @@ paths:
               example:
                 code: IDENTITY_NOT_FOUND
                 message: No identity found for handle 'mtellesy@xyz'
+        "410":
+          description: The base handle was retired permanently and cannot be resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleRetiredErrorResponse'
+              example:
+                code: HANDLE_RETIRED
+                message: The name 'old.handle' is no longer in use.
         "429":
           description: Rate limit exceeded
           content:
@@ -226,6 +242,50 @@ paths:
   # ---------------------------------------------------------------------------
   # IDENTITY — Claim and profile
   # ---------------------------------------------------------------------------
+
+  /identity/handles/{handle}/availability:
+    get:
+      tags: [Identity]
+      summary: Check whether an NPT handle can be claimed
+      description: |
+        Returns a typed availability verdict before a claim or rename is attempted.
+
+        - `AVAILABLE` — the normalized handle can be claimed now.
+        - `TAKEN` — a live or retained identity already owns the handle.
+        - `RETIRED` — the handle was used previously and is reserved permanently.
+        - `INVALID` — the candidate does not match the NPT handle format.
+
+        A registry or network failure is not an availability verdict. Clients must
+        report the dependency failure and must not treat it as `AVAILABLE`.
+      operationId: getHandleAvailability
+      security:
+        - BankKey: []
+      parameters:
+        - $ref: '#/components/parameters/HandleCandidate'
+      responses:
+        "200":
+          description: Availability verdict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleAvailabilityResponse'
+              examples:
+                available:
+                  value:
+                    handle: ahmed.ali
+                    status: AVAILABLE
+                    available: true
+                retired:
+                  value:
+                    handle: old.handle
+                    status: RETIRED
+                    available: false
+        "403":
+          description: Missing or invalid bank authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /identity/claim:
     post:
@@ -275,10 +335,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/HandleTakenErrorResponse'
               example:
                 code: HANDLE_TAKEN
                 message: The handle 'mtellesy' is already claimed
+        "410":
+          description: Handle was used previously and is retired permanently
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleRetiredErrorResponse'
+              example:
+                code: HANDLE_RETIRED
+                message: The name 'old.handle' is no longer in use.
         "422":
           description: Invalid handle format or IBAN
           content:
@@ -291,10 +360,12 @@ paths:
       tags: [Identity]
       summary: Get identity profile
       description: |
-        Returns the public profile for an NPT handle — linked bank handles and
-        whether a default is set. **IBANs are never returned in the public profile.**
+        Returns a privacy-minimized profile for an NPT handle — linked bank handles
+        and whether a default is set. **IBANs are never returned in this profile.**
         Full IBAN is only returned via `/identity/resolve`.
       operationId: getIdentity
+      security:
+        - BankKey: []
       parameters:
         - $ref: '#/components/parameters/NptHandle'
       responses:
@@ -313,11 +384,14 @@ paths:
 
     delete:
       tags: [Identity]
-      summary: Delete identity (bank-initiated, all accounts unlinked)
+      summary: Deactivate an identity without releasing its handle
       description: |
-        Deletes the entire identity and all linked accounts. Can only be called by
-        a bank that has at least one account linked to this identity.
-        Registry admin can also delete any identity.
+        Marks the identity as deleted so it no longer resolves. The handle remains
+        reserved and never becomes `AVAILABLE`; retained account-link records may be
+        kept for audit, recovery, and governance purposes.
+
+        Can only be called by a bank that has at least one account linked to this
+        identity. This operation is not a handle-release mechanism.
       operationId: deleteIdentity
       security:
         - BankKey: []
@@ -338,6 +412,483 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /identity/{npt_handle}/handle:
+    patch:
+      tags: [Identity]
+      summary: Rename a customer's NPT handle
+      description: |
+        Moves an active identity to a new handle. The previous handle is retired
+        permanently in the same transaction: it cannot be claimed or used as a
+        future rename target, and resolution returns `410 HANDLE_RETIRED` without
+        redirecting to or disclosing the replacement.
+
+        The caller must be a registered bank with a linked account for the customer,
+        and the supplied 12-digit national ID must match the identity. Renames have a
+        30-day cooldown and a lifetime cap of three successful changes. Renaming to
+        the normalized handle already owned by the identity is an idempotent no-op
+        and does not consume an allowance.
+
+        A changed rename also moves the customer portal username, rejects portal
+        sessions issued to the old username, and revokes OAuth tokens and grants
+        whose subject is the old username. The customer must sign in again with
+        the new handle and grant fresh consent to each delegated application.
+        A same-name retry changes no subject and therefore omits the three
+        rename-only fields in the response.
+      operationId: renameHandle
+      security:
+        - BankKey: []
+      parameters:
+        - $ref: '#/components/parameters/NptHandle'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameHandleRequest'
+            example:
+              newHandle: ahmed.ali
+              nationalId: "123456789012"
+      responses:
+        "200":
+          description: Identity renamed, or same-name retry accepted as a no-op
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityRenameResponse'
+              examples:
+                renamed:
+                  value:
+                    nptHandle: ahmed.ali
+                    displayName: Ahmed Ali
+                    status: ACTIVE
+                    defaultBankHandle: andalus
+                    linkedBanks: [andalus, nub]
+                    nationalIdPresent: true
+                    customerPortalAccess: null
+                    createdAt: "2026-07-01T10:00:00Z"
+                    updatedAt: "2026-08-08T11:00:00Z"
+                    retiredHandle: ahmed
+                    reauthenticationRequired: true
+                    nextStep: Customer must sign in again with 'ahmed.ali' and re-authorize delegated apps.
+        "400":
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleValidationErrorResponse'
+              example:
+                code: VALIDATION_ERROR
+                message: "new_handle: Handle must be 3-32 lowercase alphanumeric characters, dots, underscores, or hyphens"
+        "403":
+          description: Bank does not serve this identity, national ID does not match, or identity is inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleRenameNotPermittedErrorResponse'
+              example:
+                code: HANDLE_RENAME_NOT_PERMITTED
+                message: National ID does not match the identity being renamed.
+        "404":
+          description: Current identity or calling bank was not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleRenameNotFoundErrorResponse'
+        "409":
+          description: The requested new handle is owned by a current identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleTakenErrorResponse'
+              example:
+                code: HANDLE_TAKEN
+                message: The handle 'salma' is already claimed
+        "410":
+          description: The requested new handle was retired and will never become available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleRetiredErrorResponse'
+              example:
+                code: HANDLE_RETIRED
+                message: The name 'old.handle' is no longer in use.
+        "429":
+          description: The 30-day cooldown or lifetime limit of three renames was reached
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandleRenameTooSoonErrorResponse'
+              example:
+                code: HANDLE_RENAME_TOO_SOON
+                message: A name can be changed once every 30 days.
+
+  # ---------------------------------------------------------------------------
+  # AUTHENTICATION — Customer bank-app sign-in approval
+  # ---------------------------------------------------------------------------
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Start a portal sign-in
+      description: |
+        Customer sign-in accepts the OpenWave portal password with the global NPT
+        username, phone number, or national ID. A phone or national-ID sign-in does
+        not collect a bank password, PIN, OTP, or passcode. Instead it returns a
+        five-minute `BANK_APP` challenge and the customer's linked-bank choices.
+
+        The client selects one linked bank (the default may be presented first) and
+        hands the challenge to that bank's trusted app. The bank authenticates its
+        own customer locally and calls the bank-authenticated approval endpoint with
+        its internal `customerRef`. Identity never receives the bank credential.
+      operationId: loginToIdentityPortal
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalLoginRequest'
+            example:
+              username: "+218916000020"
+              password: customer-portal-password
+              role: CUSTOMER
+      responses:
+        "200":
+          description: Sign-in completed without linked-bank approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalSessionResponse'
+        "202":
+          description: TOTP verification or linked-bank approval is required
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TotpLoginChallengeResponse'
+                  - $ref: '#/components/schemas/BankAppLoginChallengeResponse'
+        "400":
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Portal username or password is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: The requested portal lane does not match the account role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleMismatchResponse'
+
+  /auth/login/totp/verify:
+    post:
+      tags: [Authentication]
+      summary: Verify a portal TOTP login challenge
+      description: |
+        Completes TOTP for a portal login. For a customer who signed in by phone
+        or national ID, successful TOTP verification advances to the same linked-
+        bank choice and approval contract; it does not bypass bank approval.
+      operationId: verifyPortalTotpLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpLoginVerifyRequest'
+      responses:
+        "200":
+          description: Sign-in completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalSessionResponse'
+        "202":
+          description: TOTP succeeded and linked-bank approval is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankAppLoginChallengeResponse'
+        "400":
+          description: Request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: TOTP challenge or code is invalid or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TotpLoginErrorResponse'
+
+  /auth/login/bank-approval/{challenge_id}:
+    get:
+      tags: [Authentication]
+      summary: Poll a linked-bank login approval
+      description: |
+        Poll with the opaque status token returned only to the login initiator.
+        `PENDING`, `REJECTED`, and `EXPIRED` return no portal session. An approved
+        challenge returns the session while it remains valid. The status token
+        is not a bank credential and must not be sent to a bank app.
+      operationId: getBankLoginApprovalStatus
+      security:
+        - LoginStatusToken: []
+      parameters:
+        - $ref: '#/components/parameters/LoginChallengeId'
+        - name: status_token
+          in: query
+          required: false
+          deprecated: true
+          description: Compatibility alternative to `X-OpenWave-Login-Status-Token`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current effective status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankLoginApprovalStatusResponse'
+        "403":
+          description: Missing or invalid status token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Challenge not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalNotFoundErrorResponse'
+
+  /identity/login-approvals:
+    get:
+      tags: [Authentication]
+      summary: List login approvals visible to the calling bank
+      description: |
+        Returns only challenges for identities with an account linked to the
+        authenticated bank. `EXPIRED` is an effective status derived from the
+        five-minute challenge expiry and is supported as a filter.
+      operationId: listBankLoginApprovals
+      security:
+        - BankKey: []
+        - BankPortalSession: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/LoginApprovalStatus'
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: Bank-scoped approval queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankLoginApprovalListResponse'
+        "400":
+          description: Unsupported status filter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalInvalidFilterErrorResponse'
+        "403":
+          description: Missing or invalid bank authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /identity/login-approvals/pending:
+    get:
+      tags: [Authentication]
+      summary: List pending approvals for one bank customer
+      operationId: listPendingBankLoginApprovals
+      security:
+        - BankKey: []
+        - BankPortalSession: []
+      parameters:
+        - name: customerRef
+          in: query
+          required: true
+          schema: { type: string }
+          description: The authenticated bank's internal customer reference.
+      responses:
+        "200":
+          description: Pending challenges for this bank customer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BankLoginApprovalQueueItem'
+        "400":
+          description: Required customer reference is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Missing or invalid bank authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /identity/login-approvals/{challenge_id}:
+    get:
+      tags: [Authentication]
+      summary: Get one login approval visible to the calling bank
+      operationId: getBankLoginApproval
+      security:
+        - BankKey: []
+        - BankPortalSession: []
+      parameters:
+        - $ref: '#/components/parameters/LoginChallengeId'
+      responses:
+        "200":
+          description: Bank-scoped approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankLoginApprovalQueueItem'
+        "403":
+          description: Missing or invalid bank authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Challenge does not exist or is not linked to this bank
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalNotFoundErrorResponse'
+
+  /identity/login-approvals/{challenge_id}/approve:
+    post:
+      tags: [Authentication]
+      summary: Approve a customer portal sign-in from a linked bank
+      operationId: approveBankLogin
+      security:
+        - BankKey: []
+        - BankPortalSession: []
+      parameters:
+        - $ref: '#/components/parameters/LoginChallengeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankLoginApprovalActionRequest'
+      responses:
+        "200":
+          description: Challenge approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankLoginApprovalActionResponse'
+        "400":
+          description: Customer reference is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Bank customer does not own an account linked to this identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalNotPermittedErrorResponse'
+        "404":
+          description: Challenge not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalNotFoundErrorResponse'
+        "409":
+          description: Challenge was already approved or rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalAlreadyActionedErrorResponse'
+        "410":
+          description: Challenge expired before the bank action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalExpiredErrorResponse'
+
+  /identity/login-approvals/{challenge_id}/reject:
+    post:
+      tags: [Authentication]
+      summary: Reject a customer portal sign-in from a linked bank
+      operationId: rejectBankLogin
+      security:
+        - BankKey: []
+        - BankPortalSession: []
+      parameters:
+        - $ref: '#/components/parameters/LoginChallengeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BankLoginApprovalActionRequest'
+      responses:
+        "200":
+          description: Challenge rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankLoginApprovalActionResponse'
+        "400":
+          description: Customer reference is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "403":
+          description: Bank customer does not own an account linked to this identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalNotPermittedErrorResponse'
+        "404":
+          description: Challenge not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalNotFoundErrorResponse'
+        "409":
+          description: Challenge was already approved or rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalAlreadyActionedErrorResponse'
+        "410":
+          description: Challenge expired before the bank action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginApprovalExpiredErrorResponse'
 
   # ---------------------------------------------------------------------------
   # ACCOUNTS — Link/unlink bank accounts under an identity
@@ -573,6 +1124,7 @@ paths:
 
         This endpoint is **public** — no authentication required.
       operationId: listBanks
+      security: []
       parameters:
         - name: country
           in: query
@@ -649,6 +1201,7 @@ paths:
       tags: [Banks]
       summary: Get a specific bank's registration
       operationId: getBank
+      security: []
       parameters:
         - $ref: '#/components/parameters/BankHandle'
       responses:
@@ -725,7 +1278,7 @@ paths:
         The system is designed to accommodate this as a future extension.
       operationId: lookupByNationalId
       security:
-        - BankApiKey: []
+        - BankKey: []
       parameters:
         - name: national_id
           in: path
@@ -758,6 +1311,7 @@ paths:
         the governance charter URL, spec version, and current operator.
         Public, no authentication required.
       operationId: getRegistryInfo
+      security: []
       responses:
         "200":
           description: Registry info
@@ -766,11 +1320,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/RegistryInfo'
               example:
-                spec_version: "1.0.0"
+                spec_version: "1.1.0"
                 operator: Neptune Fintech
                 operator_url: https://www.neptune.ly
-                governance_charter_url: https://github.com/Tellesy/openwave-spec/blob/main/GOVERNANCE.md
-                source_code_url: https://github.com/Tellesy/openwave-identity-registry
+                governance_charter_url: https://github.com/neptune-ly/openwave-spec/blob/main/GOVERNANCE.md
+                source_code_url: https://github.com/neptune-ly/openwave-identity
                 registered_banks: 4
                 active_identities: 12500
                 uptime_sla: "99.9%"
@@ -794,6 +1348,16 @@ components:
       in: header
       name: X-OpenWave-Registry-Key
       description: Issued to the registry operator (Neptune Fintech / future CBL)
+    BankPortalSession:
+      type: apiKey
+      in: header
+      name: X-OpenWave-Portal-Session
+      description: Authenticated bank-portal session scoped to one bank.
+    LoginStatusToken:
+      type: apiKey
+      in: header
+      name: X-OpenWave-Login-Status-Token
+      description: Opaque token returned only to the initiator of a bank-app login challenge.
 
   parameters:
     NptHandle:
@@ -806,6 +1370,15 @@ components:
         example: mtellesy
       description: NPT handle (username only, no @bank suffix)
 
+    HandleCandidate:
+      name: handle
+      in: path
+      required: true
+      schema:
+        type: string
+        example: ahmed.ali
+      description: Candidate handle. Invalid candidates return a typed `INVALID` verdict.
+
     BankHandle:
       name: bank_handle
       in: path
@@ -816,7 +1389,403 @@ components:
         example: andalus
       description: Bank handle as registered in the OpenWave registry
 
+    LoginChallengeId:
+      name: challenge_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Opaque five-minute bank-app login challenge identifier.
+
   schemas:
+
+    HandleAvailabilityStatus:
+      type: string
+      description: Typed reason a handle can or cannot be claimed.
+      enum: [AVAILABLE, TAKEN, RETIRED, INVALID]
+
+    HandleAvailabilityResponse:
+      type: object
+      required: [handle, status, available]
+      properties:
+        handle:
+          type: string
+          description: Candidate normalized by trimming and lowercasing.
+          example: ahmed.ali
+        status:
+          $ref: '#/components/schemas/HandleAvailabilityStatus'
+        available:
+          type: boolean
+          description: True only when status is `AVAILABLE`.
+
+    RenameHandleRequest:
+      type: object
+      description: |
+        Runtime-canonical JSON uses camelCase. The shipped Identity service also
+        accepts the legacy aliases `new_handle` and `national_id` on input only.
+      required: [newHandle, nationalId]
+      properties:
+        newHandle:
+          type: string
+          pattern: '^[a-z0-9_.-]{3,32}$'
+          description: New global handle. Lowercase letters, numbers, dots, underscores, or hyphens; 3-32 characters.
+          example: ahmed.ali
+        nationalId:
+          type: string
+          pattern: '^[0-9]{12}$'
+          description: National ID used to verify that the calling bank is renaming the correct identity.
+          example: "123456789012"
+
+    IdentityRenameResponse:
+      type: object
+      description: |
+        The shipped Identity DTO serializes this operation in camelCase. On a
+        changed rename, `retiredHandle`, `reauthenticationRequired`, and `nextStep`
+        are present. They are absent on an idempotent same-name retry. The new
+        handle appears only in this authenticated success response; resolving the
+        retired address never discloses it.
+      required:
+        - nptHandle
+        - displayName
+        - status
+        - linkedBanks
+        - nationalIdPresent
+        - customerPortalAccess
+        - createdAt
+        - updatedAt
+      properties:
+        nptHandle:
+          type: string
+          example: ahmed.ali
+        displayName:
+          type: string
+          example: Ahmed Ali
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, DELETED]
+        defaultBankHandle:
+          type: string
+          nullable: true
+          example: andalus
+        linkedBanks:
+          type: array
+          items: { type: string }
+          example: [andalus, nub]
+        nationalIdPresent:
+          type: boolean
+        customerPortalAccess:
+          $ref: '#/components/schemas/CustomerPortalAccessResponse'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        retiredHandle:
+          type: string
+          description: Previous handle, permanently retired by this changed rename.
+          example: ahmed
+        reauthenticationRequired:
+          type: boolean
+          enum: [true]
+          description: Existing portal sessions and delegated authorization cannot continue under the old subject.
+        nextStep:
+          type: string
+          description: Customer must sign in with the new handle and re-authorize delegated applications.
+
+    CustomerPortalAccessResponse:
+      type: object
+      nullable: true
+      required: [username, userCreated, emailConfigured, passwordSetupLinkIssued, nextStep]
+      properties:
+        username: { type: string }
+        userCreated: { type: boolean }
+        emailConfigured: { type: boolean }
+        passwordSetupLinkIssued: { type: boolean }
+        nextStep: { type: string }
+
+    PortalLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          description: Global NPT username, phone number, national ID, or role-specific portal login.
+        password:
+          type: string
+          format: password
+          description: OpenWave Identity portal password, never a bank-app credential.
+        role:
+          type: string
+          default: ADMIN
+          enum: [ADMIN, BANK, CUSTOMER]
+
+    PortalSessionResponse:
+      type: object
+      required: [role, username, portalRole, sessionToken, expiresIn]
+      properties:
+        role: { type: string, enum: [ADMIN, BANK, CUSTOMER] }
+        username: { type: string }
+        bankHandle: { type: string, nullable: true }
+        portalRole: { type: string }
+        sessionToken: { type: string }
+        expiresIn: { type: integer, format: int64 }
+
+    TotpLoginChallengeResponse:
+      type: object
+      required: [mfa_required, mfa_method, challenge_id, expires_in, role, username, portalRole]
+      properties:
+        mfa_required: { type: boolean, enum: [true] }
+        mfa_method: { type: string, enum: [TOTP] }
+        challenge_id: { type: string }
+        expires_in: { type: integer, format: int64, example: 300 }
+        role: { type: string, enum: [ADMIN, BANK, CUSTOMER] }
+        username: { type: string }
+        bankHandle: { type: string, nullable: true }
+        portalRole: { type: string }
+
+    TotpLoginVerifyRequest:
+      type: object
+      required: [challengeId, code]
+      properties:
+        challengeId: { type: string }
+        code: { type: string }
+
+    TotpLoginErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    RoleMismatchResponse:
+      type: object
+      required: [code, message, expectedRole, portalRole, username]
+      properties:
+        code: { type: string, enum: [ROLE_MISMATCH] }
+        message: { type: string }
+        expectedRole: { type: string, enum: [ADMIN, BANK, CUSTOMER] }
+        portalRole: { type: string }
+        username: { type: string }
+
+    BankLoginChoice:
+      type: object
+      required: [bankHandle, alias, isDefault]
+      properties:
+        bankHandle: { type: string, example: andalus }
+        alias: { type: string, example: ahmed@andalus }
+        isDefault: { type: boolean }
+
+    BankAppLoginChallengeResponse:
+      type: object
+      required:
+        - mfa_required
+        - mfa_method
+        - challenge_id
+        - status_token
+        - expires_in
+        - identifier_type
+        - identifier_hint
+        - banks
+        - role
+        - username
+        - portalRole
+        - message
+      properties:
+        mfa_required: { type: boolean, enum: [true] }
+        mfa_method: { type: string, enum: [BANK_APP] }
+        challenge_id: { type: string }
+        status_token:
+          type: string
+          description: Secret polling token for the initiating portal; do not send it to the bank app.
+        expires_in: { type: integer, format: int64, example: 300 }
+        identifier_type: { type: string, enum: [PHONE, NATIONAL_ID] }
+        identifier_hint: { type: string, example: "***0020" }
+        default_bank_handle: { type: string, nullable: true, example: andalus }
+        banks:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/BankLoginChoice'
+        role: { type: string, enum: [CUSTOMER] }
+        username: { type: string, example: ahmed }
+        portalRole: { type: string, example: CUSTOMER }
+        message: { type: string }
+
+    LoginApprovalStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, EXPIRED]
+
+    BankLoginApprovalStatusResponse:
+      type: object
+      required: [challenge_id, status, expires_in, bank_handle, session]
+      properties:
+        challenge_id: { type: string }
+        status:
+          $ref: '#/components/schemas/LoginApprovalStatus'
+        expires_in: { type: integer, format: int64, minimum: 0 }
+        bank_handle: { type: string, nullable: true }
+        session:
+          type: object
+          nullable: true
+          required: [role, username, portalRole, sessionToken, expiresIn]
+          properties:
+            role: { type: string, enum: [CUSTOMER] }
+            username: { type: string }
+            bankHandle: { type: string, nullable: true }
+            portalRole: { type: string, enum: [CUSTOMER] }
+            sessionToken: { type: string }
+            expiresIn: { type: integer, format: int64 }
+
+    BankLoginApprovalQueueItem:
+      type: object
+      required:
+        - challenge_id
+        - status
+        - identifier_type
+        - identifier_hint
+        - requested_alias
+        - created_at
+        - expires_at
+      properties:
+        challenge_id: { type: string }
+        status:
+          $ref: '#/components/schemas/LoginApprovalStatus'
+        identifier_type: { type: string, enum: [PHONE, NATIONAL_ID] }
+        identifier_hint: { type: string }
+        requested_alias: { type: string }
+        default_bank_handle: { type: string, nullable: true }
+        bank_customer_ref: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        actioned_at: { type: string, format: date-time, nullable: true }
+
+    BankLoginApprovalSummary:
+      type: object
+      required: [total, pending, approved, rejected, expired]
+      properties:
+        total: { type: integer }
+        pending: { type: integer }
+        approved: { type: integer }
+        rejected: { type: integer }
+        expired: { type: integer }
+
+    BankLoginApprovalListResponse:
+      type: object
+      required: [items, summary, limit]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BankLoginApprovalQueueItem'
+        summary:
+          $ref: '#/components/schemas/BankLoginApprovalSummary'
+        limit: { type: integer, minimum: 1, maximum: 100 }
+
+    BankLoginApprovalActionRequest:
+      type: object
+      required: [customerRef]
+      properties:
+        customerRef:
+          type: string
+          description: Internal customer reference authenticated by the calling bank.
+
+    BankLoginApprovalActionResponse:
+      type: object
+      required: [challenge_id, status, expires_in, bank_handle]
+      properties:
+        challenge_id: { type: string }
+        status: { type: string, enum: [APPROVED, REJECTED] }
+        expires_in: { type: integer, format: int64, minimum: 0 }
+        bank_handle: { type: string }
+
+    LoginApprovalInvalidFilterErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code: { type: string, enum: [LOGIN_APPROVAL_INVALID_FILTER] }
+
+    LoginApprovalNotFoundErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code: { type: string, enum: [LOGIN_APPROVAL_NOT_FOUND] }
+
+    LoginApprovalNotPermittedErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code: { type: string, enum: [LOGIN_APPROVAL_NOT_PERMITTED] }
+
+    LoginApprovalAlreadyActionedErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code: { type: string, enum: [LOGIN_APPROVAL_ALREADY_ACTIONED] }
+
+    LoginApprovalExpiredErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code: { type: string, enum: [LOGIN_APPROVAL_EXPIRED] }
+
+    HandleValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR]
+
+    HandleRenameNotPermittedErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [HANDLE_RENAME_NOT_PERMITTED]
+
+    HandleRenameNotFoundErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [IDENTITY_NOT_FOUND, BANK_NOT_REGISTERED]
+
+    HandleTakenErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [HANDLE_TAKEN]
+
+    HandleRetiredErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [HANDLE_RETIRED]
+
+    HandleRenameTooSoonErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [HANDLE_RENAME_TOO_SOON]
 
     AliasResolution:
       type: object
@@ -1084,7 +2053,16 @@ components:
           enum:
             - IDENTITY_NOT_FOUND
             - HANDLE_TAKEN
+            - HANDLE_RETIRED
             - HANDLE_INVALID_FORMAT
+            - HANDLE_RENAME_NOT_PERMITTED
+            - HANDLE_RENAME_TOO_SOON
+            - LOGIN_APPROVAL_INVALID_FILTER
+            - LOGIN_APPROVAL_NOT_FOUND
+            - LOGIN_APPROVAL_NOT_PERMITTED
+            - LOGIN_APPROVAL_ALREADY_ACTIONED
+            - LOGIN_APPROVAL_EXPIRED
+            - VALIDATION_ERROR
             - ACCOUNT_ALREADY_LINKED
             - ACCOUNT_NOT_FOUND
             - BANK_NOT_REGISTERED

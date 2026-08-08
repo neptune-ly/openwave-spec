@@ -311,6 +311,7 @@ OpenWave is an **open API standard** created and maintained by Neptune. Fintech 
   <div class="ow-module-spec"><a href="https://github.com/neptune-ly/openwave-spec/blob/main/openwave-identity-v1.0.yaml">openwave-identity-v1.0.yaml</a></div>
   <ul>
     <li>NPT handle ownership &amp; governance</li>
+    <li>Typed availability &amp; permanent retirement</li>
     <li>Multi-bank account linking</li>
     <li>Public alias resolution</li>
     <li>Bank phonebook &amp; directory</li>

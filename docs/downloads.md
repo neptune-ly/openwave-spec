@@ -1,12 +1,12 @@
 # Downloads
 
-All OpenWave spec files are OpenAPI 3.0.3 and fully machine-readable. Import them into any compatible tool in seconds.
+All OpenWave spec files are OpenAPI 3.x and fully machine-readable. Import them into any compatible tool in seconds.
 
 ---
 
 ## OpenAPI Spec Files
 
-### Payments API — `openwave-payments-v1.yaml`
+### Payments API 1.1.0 — `openwave-payments-v1.yaml`
 
 Covers payment sessions, NPT alias routing, recurring mandates, webhooks, and bank partner callbacks.
 
@@ -27,6 +27,8 @@ Covers payment sessions, NPT alias routing, recurring mandates, webhooks, and ba
 | `POST` | `/session/{id}/confirm-otp` | Confirm OTP auth |
 | `POST` | `/alias/enroll` | Enroll an NPT alias through the registry-backed flow |
 | `GET` | `/alias/{alias}` | Look up a registered alias |
+| `GET` | `/alias/{alias_username}/availability` | Get a typed availability or safe `UNKNOWN` verdict |
+| `PATCH` | `/alias/rename` | Rename and permanently retire the previous username |
 | `POST` | `/recurring/mandates` | Create recurring mandate |
 | `GET` | `/webhooks` | List webhook deliveries |
 | `GET` | `/webhooks/session/{session_id}` | List deliveries for a payment session |
@@ -104,9 +106,9 @@ Covers credit-assessment output, affordability packages, BNPL offers, revolving-
 
 ---
 
-### Identity Registry API — `openwave-identity-v1.0.yaml`
+### Identity Registry API 1.1.0 — `openwave-identity-v1.0.yaml`
 
-Covers NPT handle ownership, multi-bank account linking, public alias resolution, and bank directory.
+Covers NPT handle ownership, typed availability, safe rename, permanent retirement, multi-bank account linking, linked-bank login approval, public alias resolution, and the bank directory.
 
 <div class="ow-dl-row">
   <a class="ow-dl-btn" href="https://raw.githubusercontent.com/neptune-ly/openwave-spec/main/openwave-identity-v1.0.yaml" download>Download YAML</a>
@@ -118,11 +120,18 @@ Covers NPT handle ownership, multi-bank account linking, public alias resolution
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/identity/handles` | Register an NPT handle |
-| `GET` | `/identity/resolve/{alias}` | Resolve alias → IBAN + bank |
-| `GET` | `/identity/banks` | List all registered banks |
-| `POST` | `/identity/banks/{handle}/accounts` | Link an account to a handle |
-| `DELETE` | `/identity/handles/{alias}` | Deactivate a handle |
+| `GET` | `/identity/handles/{handle}/availability` | Return `AVAILABLE`, `TAKEN`, `RETIRED`, or `INVALID` |
+| `POST` | `/identity/claim` | Register an NPT handle |
+| `PATCH` | `/identity/{npt_handle}/handle` | Rename and retire the previous handle permanently |
+| `POST` | `/auth/login` | Start portal sign-in and linked-bank selection when required |
+| `GET` | `/auth/login/bank-approval/{challenge_id}` | Poll with the initiator's status token |
+| `GET` | `/identity/login-approvals` | List the authenticated bank's approval queue |
+| `POST` | `/identity/login-approvals/{challenge_id}/approve` | Approve after local bank authentication |
+| `POST` | `/identity/login-approvals/{challenge_id}/reject` | Reject after local bank authentication |
+| `GET` | `/identity/resolve?alias={alias}` | Resolve alias → IBAN + bank |
+| `POST` | `/identity/{npt_handle}/accounts` | Link an account to a handle |
+| `DELETE` | `/identity/{npt_handle}` | Deactivate without releasing the handle |
+| `GET` | `/banks` | List all registered banks |
 
 ---
 
@@ -231,7 +240,11 @@ Open `http://localhost:8080` — full interactive docs with live try-it-out (poi
 ### Redocly
 
 ```bash
-npx @redocly/cli preview-docs openwave-payments-v1.yaml
+npm ci
+npm run spec:lint
+
+# Optional local preview using the pinned CLI
+npx --no-install redocly preview-docs openwave-payments-v1.yaml
 ```
 
 ### Insomnia
@@ -244,7 +257,7 @@ Use **Collections → Import → OpenAPI** for quick browser-based exploration. 
 
 ### Stoplight Elements
 
-Teams that want an internal branded API portal can render the same YAML files with Stoplight Elements or any OpenAPI 3.0 compatible documentation renderer.
+Teams that want an internal branded API portal can render the same YAML files with Stoplight Elements or any OpenAPI 3.x compatible documentation renderer.
 
 ---
 
@@ -348,12 +361,11 @@ Clone the full spec repository for offline use or CI/CD validation:
 git clone https://github.com/neptune-ly/openwave-spec.git
 cd openwave-spec
 
-# Validate specs with Redocly CLI
-npx @redocly/cli lint openwave-payments-v1.yaml
-npx @redocly/cli lint openwave-open-banking-v1.0.yaml
-npx @redocly/cli lint openwave-credit-finance-v1.yaml
-npx @redocly/cli lint openwave-identity-v1.0.yaml
-npx @redocly/cli lint openwave-gateway-interconnect-v1.yaml
+# Install exactly the dependency versions in package-lock.json
+npm ci
+
+# Lint all six specs, enforce the NPT contract, and build the docs
+npm run verify
 ```
 
 ---
@@ -368,4 +380,4 @@ OpenWave follows **Semantic Versioning**:
 | New endpoint or optional field | `MINOR` (1.0 → 1.1) |
 | Clarification, fix, or example update | `PATCH` (1.0.0 → 1.0.1) |
 
-The `api_version` field in every webhook envelope and the `info.version` in each spec always reflect the current module version. All changes are logged in [CHANGELOG.md](https://github.com/neptune-ly/openwave-spec/blob/main/CHANGELOG.md).
+The OpenAPI `info.version` identifies each module release. Webhook `api_version` identifies the event-envelope contract and can evolve independently; the current envelope remains `1.0.0`. All changes are logged in [CHANGELOG.md](https://github.com/neptune-ly/openwave-spec/blob/main/CHANGELOG.md).

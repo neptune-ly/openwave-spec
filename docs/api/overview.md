@@ -1,6 +1,6 @@
 # API Overview
 
-OpenWave is defined by six OpenAPI 3.0.3 specification files. All are ready to load into Swagger UI, Postman, Redocly, or any OpenAPI-compatible tool.
+OpenWave is defined by six OpenAPI 3.x specification files. All are ready to load into Swagger UI, Postman, Redocly, or any OpenAPI-compatible tool.
 
 ## Spec Files
 
@@ -21,7 +21,7 @@ Browse and test the full API surface in your browser.
 
 ## API Modules
 
-### Payments (`openwave-payments-v1.yaml`)
+### Payments 1.1.0 (`openwave-payments-v1.yaml`)
 
 | Method | Path | Description |
 |:---|:---|:---|
@@ -54,9 +54,11 @@ Browse and test the full API surface in your browser.
 
 | Method | Path | Description |
 |:---|:---|:---|
-| `GET` | `/alias/{username}` | Get alias details |
-| `GET` | `/alias/{username}/accounts` | List linked accounts |
-| `DELETE` | `/alias/{username}` | Deactivate alias |
+| `GET` | `/alias/{alias}` | Get alias details |
+| `GET` | `/alias/{alias_username}/availability` | Get `AVAILABLE`, `TAKEN`, `RETIRED`, `INVALID`, or `UNKNOWN` |
+| `PATCH` | `/alias/rename` | Rename a handle and retire the previous name permanently |
+| `GET` | `/alias/{alias}/accounts` | List linked accounts |
+| `DELETE` | `/alias/{alias}` | Deactivate alias |
 
 ### Webhooks
 
@@ -99,17 +101,26 @@ Browse and test the full API surface in your browser.
 | `GET` | `/finance/contracts/{contract_id}/repayment-schedule` | Read repayment schedule |
 | `POST` | `/finance/contracts/{contract_id}/cancel` | Cancel a cancellable contract |
 
-### Identity Registry (`openwave-identity-v1.0.yaml`)
+### Identity Registry 1.1.0 (`openwave-identity-v1.0.yaml`)
 
 | Method | Path | Description |
 |:---|:---|:---|
 | `GET` | `/v1/identity/resolve` | Resolve alias → IBAN (public) |
+| `GET` | `/v1/identity/handles/{handle}/availability` | Get a typed claimability verdict |
 | `POST` | `/v1/identity/claim` | Claim an NPT handle |
-| `GET` | `/v1/identity/{handle}` | Get public profile |
+| `GET` | `/v1/identity/{handle}` | Get bank-authenticated, privacy-minimized profile |
+| `PATCH` | `/v1/identity/{handle}/handle` | Rename and permanently retire the old handle |
+| `POST` | `/v1/auth/login` | Start customer sign-in and, when required, a linked-bank challenge |
+| `POST` | `/v1/auth/login/totp/verify` | Verify TOTP and continue phone/national-ID login to bank approval |
+| `GET` | `/v1/auth/login/bank-approval/{challenge_id}` | Poll a challenge with its status token |
+| `GET` | `/v1/identity/login-approvals` | List the authenticated bank's approval queue |
+| `GET` | `/v1/identity/login-approvals/{challenge_id}` | Read one bank-scoped approval |
+| `POST` | `/v1/identity/login-approvals/{challenge_id}/approve` | Approve after local bank authentication |
+| `POST` | `/v1/identity/login-approvals/{challenge_id}/reject` | Reject after local bank authentication |
 | `GET` | `/v1/identity/{handle}/accounts` | List linked accounts |
 | `POST` | `/v1/identity/{handle}/accounts` | Link additional bank |
 | `PATCH` | `/v1/identity/{handle}/default` | Set default account |
-| `DELETE` | `/v1/identity/{handle}` | Delete identity |
+| `DELETE` | `/v1/identity/{handle}` | Deactivate identity without releasing the handle |
 | `GET` | `/v1/banks` | Bank phonebook (public) |
 | `POST` | `/v1/banks` | Register bank (admin) |
 | `GET` | `/v1/registry/info` | Registry metadata (public) |

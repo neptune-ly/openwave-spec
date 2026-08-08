@@ -29,11 +29,8 @@ jobs:
 
       - run: npm ci
 
-      - name: Check public surface
-        run: npm run public:check
-
-      - name: Build docs
-        run: npm run docs:build
+      - name: Verify specs and build docs
+        run: npm run verify
 
       - uses: actions/upload-pages-artifact@v3
         with:

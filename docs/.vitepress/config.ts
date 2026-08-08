@@ -49,7 +49,7 @@ export default defineConfig({
         ]
       },
       {
-        text: 'v1.0.0',
+        text: 'v1.1.0',
         items: [
           { text: 'Changelog', link: 'https://github.com/neptune-ly/openwave-spec/blob/main/CHANGELOG.md' },
           { text: 'Contributing', link: 'https://github.com/neptune-ly/openwave-spec/blob/main/CONTRIBUTING.md' },

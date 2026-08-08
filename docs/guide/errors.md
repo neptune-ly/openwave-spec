@@ -26,9 +26,11 @@ Include `request_id` when contacting support — it traces the request through a
 | `403` | Forbidden — valid key but insufficient permissions |
 | `404` | Not found |
 | `409` | Conflict — resource already exists (e.g. handle taken) |
+| `410` | Gone — a retired NPT handle is permanently unavailable |
 | `422` | Unprocessable — semantically invalid (e.g. amount too low) |
 | `429` | Rate limited |
 | `500` | Gateway internal error |
+| `502` | Upstream bank or Identity dependency failed |
 | `503` | Gateway or bank core temporarily unavailable |
 
 ## Error Code Reference
@@ -53,6 +55,13 @@ Include `request_id` when contacting support — it traces the request through a
 | `SESSION_EXPIRED` | 422 | Session TTL elapsed |
 | `SESSION_ALREADY_COMPLETED` | 409 | Cannot modify a completed session |
 | `ALIAS_NOT_FOUND` | 404 | NPT alias does not exist |
+| `ALIAS_INVALID` | 400 | Requested alias format or national ID is invalid |
+| `ALIAS_RENAME_NOT_PERMITTED` | 403 | Calling bank does not serve the customer or national ID does not match |
+| `ALIAS_TAKEN` | 409 | Requested alias belongs to a current identity |
+| `ALIAS_RETIRED` | 410 | Requested alias is permanently retired and will never be reusable |
+| `ALIAS_RENAME_TOO_SOON` | 429 | Rename cooldown or lifetime limit was reached |
+| `IDENTITY_UNAVAILABLE` | 502 | Identity could not be reached; no rename was made |
+| `IDENTITY_DISABLED` | 503 | Identity integration is disabled for this gateway deployment |
 | `ALIAS_INACTIVE` | 422 | Alias exists but is deactivated |
 | `BANK_NOT_PARTICIPATING` | 422 | The destination bank is not connected |
 | `AMOUNT_TOO_LOW` | 422 | Below bank minimum transaction amount |
@@ -93,8 +102,17 @@ Include `request_id` when contacting support — it traces the request through a
 | Code | HTTP | Cause |
 |:---|:---:|:---|
 | `HANDLE_TAKEN` | 409 | NPT handle already claimed by another user |
-| `HANDLE_INVALID` | 400 | Handle format does not meet requirements |
+| `HANDLE_RETIRED` | 410 | NPT handle was used previously and is reserved permanently |
+| `VALIDATION_ERROR` | 400 | Rename request fields do not meet their format requirements |
+| `HANDLE_INVALID_FORMAT` | 422 | Claimed handle format does not meet requirements |
+| `HANDLE_RENAME_NOT_PERMITTED` | 403 | Calling bank is not linked, identity is inactive, or national ID does not match |
+| `HANDLE_RENAME_TOO_SOON` | 429 | Rename cooldown or lifetime cap was reached |
 | `BANK_NOT_REGISTERED` | 404 | Bank handle not in the registry |
+| `LOGIN_APPROVAL_INVALID_FILTER` | 400 | Approval list filter is not `PENDING`, `APPROVED`, `REJECTED`, or `EXPIRED` |
+| `LOGIN_APPROVAL_NOT_PERMITTED` | 403 | Calling bank customer does not own a linked account for the challenge identity |
+| `LOGIN_APPROVAL_NOT_FOUND` | 404 | Challenge is missing or not visible to the calling bank |
+| `LOGIN_APPROVAL_ALREADY_ACTIONED` | 409 | Challenge was already approved or rejected |
+| `LOGIN_APPROVAL_EXPIRED` | 410 | Five-minute approval window elapsed; begin a new sign-in |
 
 ## Rate Limits
 
