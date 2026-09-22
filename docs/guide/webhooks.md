@@ -81,7 +81,18 @@ Return `2xx` within **10 seconds**. The gateway retries failed deliveries:
 | 4 | 30 minutes |
 | 5 | 2 hours |
 
-After 5 failed attempts, the delivery is marked `FAILED` and visible in the admin dashboard for manual retry.
+After 5 failed attempts, the delivery is marked `FAILED` and remains visible in the merchant delivery log for manual retry and reconciliation.
+
+## Delivery Logs and Recovery
+
+Your integration can list and inspect webhook deliveries from your backend:
+
+```http
+GET /webhooks?status=FAILED&event_type=payment.completed&page=0&limit=25
+Authorization: Bearer mk_live_...
+```
+
+Use `GET /webhooks/{delivery_id}` to recover the exact payload for a missed event. The response includes delivery status, attempt count, last HTTP response status, retry timing, event type, and payload. This lets your operations team recover orders even if your endpoint was unavailable or your application dropped an event after receiving it.
 
 ## Idempotency
 
@@ -135,6 +146,24 @@ Refund events include `refund_id`, `session_id`, `amount`, `currency`, `status`,
 | `presentment.expired` | Presentment expired before claim or completion |
 | `presentment.cancelled` | Presentment was cancelled before claim |
 
+### Merchant Account Events
+
+| Event | Trigger |
+|:---|:---|
+| `merchant.account.transaction.posted` | A bank-origin credit or debit affected the merchant account |
+| `merchant.account.transaction.updated` | Additional bank reference data was attached after the first account event |
+| `webhook.test` | A portal or operator sent a test delivery |
+
+Use these events for bank-origin notifications that do not start as a merchant-created payment session. The sender must normalize the event into the OpenWave envelope and include merchant-safe fields such as amount, currency, direction, status, CBS reference, bank reference, rail reference, masked account identifier, and rail source. Do not forward raw LyPay, CBS, card, or bank-core payloads to merchants.
+
+Example implementation flow:
+
+```text
+LyPay -> Bank middleware -> OpenWave gateway -> Merchant webhook
+```
+
+This flow is implementation-specific. The OpenWave standard defines the normalized merchant webhook contract; each bank decides how it receives, enriches, stores, retries, and forwards its local rail events.
+
 ### Open Banking Events
 
 | Event | Trigger |
@@ -172,6 +201,8 @@ Authorization: Bearer mk_live_...
 ```
 
 Omit `events` to subscribe to all events.
+
+Merchants should use the portal or operator API to save their HTTPS webhook URL, then send a `webhook.test` event before going live. Subscriptions and recurring mandates use the same webhook endpoint and signature secret as one-time payments.
 
 Webhook secrets are issued at configuration time. Rotate via:
 ```http

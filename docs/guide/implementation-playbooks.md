@@ -107,6 +107,7 @@ Gateway operators implement policy, routing, merchant APIs, hosted customer surf
 | 4 | Webhook delivery | Events are signed, retried, logged, and replayable by operators. |
 | 5 | Identity resolution | Gateway uses the registry as source of truth for NPT handles. |
 | 6 | OW-GIP | Gateway can discover peers, route remote payments, and reconcile settlement batches. |
+| 7 | OAuth protected-resource posture | Gateway publishes protected-resource metadata, uses authenticated token introspection, and shows fail-closed readiness without exposing secrets. |
 
 Minimum production evidence:
 
@@ -116,6 +117,7 @@ Minimum production evidence:
 - Webhook retry after receiver outage.
 - Gateway health and route-status responses.
 - Operational dashboard with bank, merchant, customer, route, and error filters.
+- OAuth readiness shows authorization servers, supported scopes, resource-server credential presence, tokenless protection, and kill-switch posture.
 
 ## Identity registry playbook
 
@@ -129,6 +131,17 @@ The registry is the source of truth for NPT handles and bank-scoped account link
 | 4 | Default route | Customer can choose default account without unsafe global alias rename. |
 | 5 | Public resolution | Gateways can resolve route metadata without receiving private banking data. |
 | 6 | Recovery and governance | Suspension, dispute, recovery, and audit paths are documented. |
+| 7 | OAuth control plane, if operated | Registry owns client registration, authorization-code + PKCE consent, resource-server clients, token/grant revocation, and environment/owner kill switches. |
+
+Minimum production evidence for an OAuth control plane:
+
+- Exact redirect URI matching is enforced.
+- PKCE `S256` is mandatory and `plain` is rejected.
+- Authorization codes are short-lived, one-time use, and bound to the client and redirect URI.
+- Refresh tokens are client-bound and reuse revokes the token family.
+- Resource-server introspection requires an approved resource-server client.
+- Customer/operator grant revocation invalidates future access.
+- Kill switches can stop OAuth globally, per environment, per owner type, and per client.
 
 ## Standard test personas
 

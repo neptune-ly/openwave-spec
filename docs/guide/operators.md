@@ -19,6 +19,18 @@ OpenWave is implementation-neutral. Reference implementations may be published b
 
 Any implementation can be compliant if it follows the OpenAPI contracts, security requirements, webhook semantics, idempotency rules, and settlement behavior defined by this specification.
 
+## Bank stack neutrality
+
+OpenWave is designed for a mixed banking ecosystem, including Libya, where participating banks may have very different internal stacks.
+
+An OpenWave participant bank may:
+
+- connect directly from its own middleware or core-banking integration layer
+- expose a lightweight adapter for OpenWave callbacks and customer authorization handoffs
+- use a commercial implementation such as Neptune Astro or a bank-side adapter such as Nexus
+
+Those choices are implementation details. The standard defines the external contract, security expectations, webhook semantics, and routing behavior. It does not require one operator stack, one mobile edge, or one middleware product.
+
 ## Running Your Own Gateway
 
 ### Minimum Requirements
@@ -45,6 +57,19 @@ A production gateway should expose an operator control plane for sandbox/live re
 
 See [Production Readiness](./production-readiness.md) for the deployment baseline.
 
+### OAuth Protected Resources
+
+Gateways, registries, and agent-access surfaces that accept OpenWave OAuth bearer tokens should treat OAuth as two separate responsibilities:
+
+| Responsibility | Requirement |
+|---|---|
+| Authorization server | Owns client registration, exact redirect URI matching, authorization-code + PKCE consent, token issuance, token revocation, grant revocation, and kill switches. |
+| Protected resource | Publishes protected-resource metadata, authenticates to token introspection as a resource-server client, checks audience/scope/owner/environment, and fails closed when introspection is unavailable. |
+
+Resource-server clients should have the minimum introspection scope needed for their deployment. They must not expose client secrets, bearer tokens, OTPs, raw national IDs, raw phone numbers, or full account data in readiness screens, logs, exported reports, or documentation.
+
+Remote automation and MCP-style tools are optional operator surfaces. In v1 they should be read-only unless a future safety review defines narrow mutation scopes, audit events, approval gates, and kill switches.
+
 ### Architecture Overview
 
 ```
@@ -69,6 +94,8 @@ Production: https://registry.openwave.ly
 ```
 
 Or [run your own registry](https://github.com/neptune-ly/openwave-identity).
+
+In Libya-oriented deployments, the registry should be treated as a **bank-vouched digital identity and payment identity layer**. It resolves routing facts and preserves identity continuity across banks, but it does not replace the bank's own KYC, authentication, CBS controls, or regulated account servicing.
 
 ### Settlement
 
@@ -172,6 +199,9 @@ In a real-time gross settlement model, each confirmed payment maps to one interb
 - [ ] Access token TTL ≤ 15 minutes
 - [ ] Refresh token single-use rotation enforced
 - [ ] `DELETE /ob/consents/{id}` immediately invalidates all associated tokens
+- [ ] Protected resources use authenticated introspection and fail closed when OAuth is enabled but resource-server credentials are missing
+- [ ] Delegated authorization-code grants are revocable by customer/operator surfaces
+- [ ] Remote automation or MCP-style access is read-only unless mutation scopes, audit, and kill switches are explicitly approved
 - [ ] Amount convention: integers in minor units validated and enforced
 - [ ] `/banks/{handle}/capabilities` endpoint publicly accessible
 - [ ] Identity Registry connected for alias resolution

@@ -21,7 +21,7 @@ OpenWave solves this with coordinated specifications:
 | **Presented Payments API** | QR and NFC presentments that create secure one-time payment or mandate approval flows |
 | **Open Banking API** | Consent-based account access (AISP) and payment initiation (PISP) for TPPs |
 | **Credit & Finance API** | Consented affordability packages, BNPL, revolving-credit, Murabaha, contracts, repayments |
-| **Identity Registry** | Global NPT handle ownership, multi-bank linking, public alias resolution |
+| **Identity Registry** | Global NPT handle ownership, multi-bank linking, public alias resolution, and bank-vouched digital identity continuity |
 
 ## Who Runs a Gateway?
 
@@ -32,6 +32,8 @@ Any server that **implements this specification** is an **OpenWave Gateway**. A 
 - Enforces Strong Customer Authentication (SCA)
 - Delivers webhook events to merchants
 - Issues and validates NPT aliases
+
+In Libya-focused deployments, OpenWave Identity is more than an alias lookup utility. It is the bank-vouched customer payment identity layer that lets one customer identity span multiple banks while keeping bank trust boundaries intact.
 
 Any bank, fintech, processor, or national switch operator can run an OpenWave-compliant gateway. The specification is not tied to a single product or operator.
 

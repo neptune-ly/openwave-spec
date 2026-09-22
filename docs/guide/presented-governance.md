@@ -20,12 +20,14 @@ At minimum, capability metadata should state:
 - supported intents
 - deployment role
 - enablement flags for merchant-presented QR/NFC/app handoff, direct operator presentment, and mandate-approval presentments
+- for NFC, whether backend support is ready separately from whether a customer app or wallet runtime may expose NFC UI
 
 ## Merchant and wallet expectation
 
 Merchant and wallet software must check capabilities before assuming:
 
 - NFC is available
+- NFC backend readiness means customer-facing NFC is already live
 - recurring mandate approval can start from presentment
 - a direct bank or wallet endpoint can replace a gateway endpoint
 

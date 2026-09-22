@@ -20,6 +20,8 @@ Presented payments are a **channel capability**, not a gateway-only product feat
 
 Operators decide which channels and intents are enabled in each deployment.
 
+QR visual guidance is part of the presented-payment contract. The payload still controls interoperability; the center OpenWave mark and QR frame are customer-recognition cues. See [QR Design Guidelines](../guide/presented-qr-design.md).
+
 ## Endpoints at a glance
 
 | Endpoint | Why it exists |
@@ -56,6 +58,8 @@ Operators decide which channels and intents are enabled in each deployment.
     "enabled": {
       "merchant_presented_qr": true,
       "merchant_presented_nfc": true,
+      "merchant_presented_nfc_backend_ready": true,
+      "merchant_presented_nfc_runtime_ready": true,
       "app_handoff": true,
       "direct_operator_presentment": true,
       "mandate_approval_presentment": true
@@ -63,6 +67,8 @@ Operators decide which channels and intents are enabled in each deployment.
   }
 }
 ```
+
+For staged NFC rollouts, an operator may set `merchant_presented_nfc_backend_ready=true` while keeping `merchant_presented_nfc=false` and `merchant_presented_nfc_runtime_ready=false`. That means the backend can create and claim NFC presentments, but bank apps and wallets must not show NFC tap UI yet.
 
 ### Create presentment
 
@@ -87,7 +93,15 @@ Operators decide which channels and intents are enabled in each deployment.
   "qr_payload": {
     "format": "OPENWAVE_URI",
     "render_hint": "SVG_OR_PNG",
-    "value": "openwave://presentments/prs_01J15B6A1N2QZ5YP4V4P4FJW40?token=claim-token&channel=QR&intent=ONE_TIME_PAYMENT&operator=andalus-direct"
+    "value": "openwave://presentments/prs_01J15B6A1N2QZ5YP4V4P4FJW40?token=claim-token&channel=QR&intent=ONE_TIME_PAYMENT&operator=andalus-direct",
+    "visual_guidance": {
+      "center_mark": "OPENWAVE_MARK",
+      "center_mark_max_module_area_percent": 15,
+      "quiet_zone_modules": 4,
+      "error_correction_level": "H",
+      "recommended_caption": "Pay with OpenWave",
+      "scanner_behavior": "SMART_ROUTE_BY_PAYLOAD"
+    }
   }
 }
 ```

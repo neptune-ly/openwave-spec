@@ -81,6 +81,8 @@ export default defineConfig({
           items: [
             { text: 'For Merchants', link: '/guide/merchants' },
             { text: 'For Banks', link: '/guide/banks' },
+            { text: 'Merchant Webhooks', link: '/guide/webhooks' },
+            { text: 'Reports & Readiness', link: '/guide/reports-readiness' },
             { text: 'For TPPs (Open Banking)', link: '/guide/tpp' },
             { text: 'Decentralized Open Banking', link: '/guide/decentralized-open-banking' },
             { text: 'QR Payloads', link: '/guide/presented-qr' },
